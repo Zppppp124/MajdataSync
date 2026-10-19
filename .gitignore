@@ -14,6 +14,7 @@ route-download-test/
 speed-test*/
 *test*/
 _site-index.js
+_*.cs
 *.user
 *.suo
 .vs/

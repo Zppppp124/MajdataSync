@@ -60,6 +60,11 @@
             <span class="status-dot"></span>
             <span id="connectionText">本地目录待识别</span>
           </div>
+          <select id="storageTarget" class="select-control compact" title="下载内容存放位置">
+            <option value="both">本地 + 在线缓存</option>
+            <option value="cache">仅在线缓存</option>
+            <option value="local">仅本地曲目库</option>
+          </select>
           <button class="button ghost" id="refreshIndex">
             <span data-icon="refresh-cw"></span> 刷新索引
           </button>
@@ -145,6 +150,14 @@
             <div>
               <div class="workflow-title">网络加速 <span class="badge" id="networkModeBadge">AUTO</span></div>
               <p id="networkCardText">自动选择低延迟 CDN 节点，大文件分段下载。</p>
+            </div>
+            <span class="workflow-arrow" data-icon="arrow-right"></span>
+          </button>
+          <button class="workflow-card cache-wide" id="cardCacheAll">
+            <div class="workflow-icon pink"><span data-icon="database"></span></div>
+            <div>
+              <div class="workflow-title">预热在线缓存</div>
+              <p>把已下载的本地曲目写入 MajdataPlay 在线缓存。</p>
             </div>
             <span class="workflow-arrow" data-icon="arrow-right"></span>
           </button>
@@ -324,6 +337,17 @@
                 <option value="single">单连接 · 兼容</option>
                 <option value="2">双连接</option>
                 <option value="4">四连接</option>
+              </select>
+            </div>
+            <div class="setting-row">
+              <div>
+                <strong>下载存放目标</strong>
+                <span>可同时保留本地曲目与 MajdataPlay 在线缓存</span>
+              </div>
+              <select class="select-control" id="settingsStorageTarget">
+                <option value="both">本地 + 在线缓存</option>
+                <option value="cache">仅在线缓存</option>
+                <option value="local">仅本地曲目库</option>
               </select>
             </div>
             <div class="setting-row">

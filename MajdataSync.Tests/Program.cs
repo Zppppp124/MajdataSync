@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -84,7 +85,8 @@ internal static class Program
                 !args[0].StartsWith("catalog:", StringComparison.OrdinalIgnoreCase) &&
                 !args[0].StartsWith("network:", StringComparison.OrdinalIgnoreCase) &&
                 !args[0].StartsWith("speed:", StringComparison.OrdinalIgnoreCase) &&
-                !args[0].StartsWith("routes:", StringComparison.OrdinalIgnoreCase))
+                !args[0].StartsWith("routes:", StringComparison.OrdinalIgnoreCase) &&
+                !args[0].StartsWith("cache:", StringComparison.OrdinalIgnoreCase))
             {
                 var sampleRoot = FolderDetector.DetectFrom(args[0]);
                 Assert(sampleRoot is not null, "Sample root should be detected as a Majdata folder");
@@ -217,6 +219,48 @@ internal static class Program
                 }
 
                 Console.WriteLine("PASS: site and IP routing");
+            }
+
+            if (args.Length == 2 && args[0].StartsWith("cache:", StringComparison.OrdinalIgnoreCase))
+            {
+                var cacheRoot = FolderDetector.DetectFrom(args[0]["cache:".Length..]);
+                Assert(cacheRoot is not null, "Cache test root should be detected");
+                var cacheChart = new ChartItem
+                {
+                    Id = "b0fb0807-ccf8-44a1-8649-573024cd4e04",
+                    Title = "Sparkle New Life",
+                    Artist = "rider",
+                    Hash = "geVdAhVCF24HX6nlw+G0qA==",
+                    Timestamp = DateTimeOffset.Now
+                };
+                using var cacheApi = new ChartApi();
+                var cacheInstaller = new ChartInstaller(cacheApi);
+                var sourceRecord = await cacheInstaller.DownloadChartAsync(
+                    cacheRoot!,
+                    cacheChart,
+                    includeVideo: false,
+                    concurrency: 4,
+                    (_, _) => Task.CompletedTask,
+                    CancellationToken.None);
+                Assert(sourceRecord is not null, "Cache source download should succeed");
+                await OnlineCacheWriter.PublishAsync(
+                    cacheRoot!,
+                    cacheChart,
+                    Path.Combine(cacheRoot!.RootPath, sourceRecord!.Folder),
+                    CancellationToken.None);
+                var expectedCache = OnlineCacheWriter.CacheFolder(cacheRoot!, cacheChart.Hash);
+                Assert(Directory.Exists(expectedCache), "Online cache folder should exist");
+                foreach (var file in new[] { "maidata.txt", "track.mp3", "bg.jpg", "bg_fullSize.jpg" })
+                {
+                    var path = Path.Combine(expectedCache, file);
+                    Assert(File.Exists(path), "Online cache is missing " + file);
+                    var expected = (await File.ReadAllTextAsync(path + ".sha256")).Trim();
+                    await using var stream = File.OpenRead(path);
+                    var actual = Convert.ToBase64String(await SHA256.HashDataAsync(stream));
+                    Assert(expected == actual, "Online cache hash mismatch: " + file);
+                }
+
+                Console.WriteLine("PASS: MajdataPlay online cache layout and Base64 SHA-256");
             }
 
                 Console.WriteLine("PASS: directory detection, cross-volume import, and traversal protection");

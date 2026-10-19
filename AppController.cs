@@ -106,6 +106,12 @@ internal sealed class AppController : IDisposable
             case "openLogs":
                 AppLogger.OpenLogFolder();
                 break;
+            case "importCache":
+                await ImportOnlineCacheAsync(payload);
+                break;
+            case "syncCacheAll":
+                await SyncAllToCacheAsync();
+                break;
             case "openChart":
                 OpenChart(payload);
                 break;
@@ -203,10 +209,24 @@ internal sealed class AppController : IDisposable
 
     private async Task SaveSettingsAsync(JsonElement payload)
     {
-        _settings.Concurrency = Math.Clamp(GetInt(payload, "concurrency", 6), 1, 12);
-        _settings.IncludeVideo = GetBool(payload, "includeVideo", true);
-        _settings.AutoCheck = GetBool(payload, "autoCheck", true);
-        _settings.UseMirrors = GetBool(payload, "useMirrors", true);
+        _settings.Concurrency = Math.Clamp(
+            GetInt(payload, "concurrency", _settings.Concurrency),
+            1,
+            12);
+        _settings.IncludeVideo = GetBool(payload, "includeVideo", _settings.IncludeVideo);
+        _settings.AutoCheck = GetBool(payload, "autoCheck", _settings.AutoCheck);
+        if (payload.ValueKind == JsonValueKind.Object &&
+            payload.TryGetProperty("useMirrors", out var useMirrors) &&
+            useMirrors.ValueKind is JsonValueKind.True or JsonValueKind.False)
+        {
+            _settings.UseMirrors = useMirrors.GetBoolean();
+        }
+        if (payload.ValueKind == JsonValueKind.Object &&
+            payload.TryGetProperty("storageTarget", out var storageTarget) &&
+            storageTarget.ValueKind == JsonValueKind.String)
+        {
+            _settings.StorageTarget = ResolveStorageTarget(storageTarget.GetString() ?? "");
+        }
         var mode = GetString(payload, "downloadMode");
         if (new[] { "auto", "single", "2", "4" }.Contains(mode))
         {
@@ -378,6 +398,10 @@ internal sealed class AppController : IDisposable
         var request = payload.Deserialize<SyncRequest>(JsonOptions.Default) ?? new SyncRequest();
         request.IncludeVideo = GetBool(payload, "includeVideo", _settings.IncludeVideo);
         request.Concurrency = Math.Clamp(request.Concurrency, 1, 12);
+        request.StorageTarget = ResolveStorageTarget(
+            GetString(payload, "storageTarget") is { Length: > 0 } requestedTarget
+                ? requestedTarget
+                : _settings.StorageTarget);
         BeginOperation();
         try
         {
@@ -438,9 +462,15 @@ internal sealed class AppController : IDisposable
                 try
                 {
                     var prior = inventory.Charts.GetValueOrDefault(chart.Id);
+                    var cacheFolder = OnlineCacheWriter.CacheFolder(_folder, chart.Hash);
+                    var cacheReady = Directory.Exists(cacheFolder) &&
+                                     File.Exists(Path.Combine(cacheFolder, "maidata.txt")) &&
+                                     File.Exists(Path.Combine(cacheFolder, "track.mp3")) &&
+                                     File.Exists(Path.Combine(cacheFolder, "bg.jpg"));
                     if (prior is not null &&
                         string.Equals(prior.Hash, chart.Hash, StringComparison.Ordinal) &&
-                        Directory.Exists(Path.Combine(_folder.RootPath, prior.Folder)))
+                        Directory.Exists(Path.Combine(_folder.RootPath, prior.Folder)) &&
+                        (request.StorageTarget == "local" || cacheReady))
                     {
                         Interlocked.Increment(ref skipped);
                         return;
@@ -473,6 +503,31 @@ internal sealed class AppController : IDisposable
                     if (record is null)
                     {
                         return;
+                    }
+
+                    if (_folder is not null && request.StorageTarget is "both" or "cache")
+                    {
+                        await SendAsync("task", new
+                        {
+                            id = chart.Id,
+                            state = "downloading",
+                            title = chart.Title,
+                            subtitle = "正在写入 MajdataPlay 在线缓存",
+                            progress = 1.0
+                        });
+                        await OnlineCacheWriter.PublishAsync(
+                            _folder,
+                            chart,
+                            Path.Combine(_folder.RootPath, record.Folder),
+                            _operation.Token);
+                    }
+
+                    if (_folder is not null && request.StorageTarget == "cache")
+                    {
+                        Directory.Delete(Path.Combine(_folder.RootPath, record.Folder), recursive: true);
+                        record.Folder = Path.GetRelativePath(
+                            _folder.RootPath,
+                            OnlineCacheWriter.CacheFolder(_folder, chart.Hash));
                     }
 
                     await inventoryLock.WaitAsync(_operation.Token);
@@ -708,6 +763,161 @@ internal sealed class AppController : IDisposable
         }
     }
 
+    private async Task ImportOnlineCacheAsync(JsonElement payload)
+    {
+        if (!EnsureReady() || _folder is null || _operationRunning)
+        {
+            return;
+        }
+
+        var id = GetString(payload, "id");
+        var chart = _charts.FirstOrDefault(item =>
+            item.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
+        if (chart is null)
+        {
+            await SendAsync("toast", new { kind = "warning", message = "请先刷新曲目索引" });
+            return;
+        }
+
+        BeginOperation();
+        try
+        {
+            await SendAsync("operation", new
+            {
+                stage = "import",
+                message = "正在把本地曲目写入在线缓存：" + chart.Title,
+                indeterminate = true
+            });
+            var inventory = await new InventoryStore(_folder.RootPath)
+                .LoadAsync(_operation!.Token);
+            if (!inventory.Charts.TryGetValue(chart.Id, out var record))
+            {
+                throw new InvalidDataException("请先下载该曲目到本地");
+            }
+
+            var source = Path.Combine(_folder.RootPath, record.Folder);
+            if (!Directory.Exists(source))
+            {
+                throw new InvalidDataException("本地曲目文件夹不存在");
+            }
+
+            await OnlineCacheWriter.PublishAsync(
+                _folder,
+                chart,
+                source,
+                _operation.Token);
+            await SendAsync("operation", new
+            {
+                stage = "done",
+                message = "在线缓存已写入 Cache\\Net\\MajdataNET"
+            });
+            await SendAsync("toast", new
+            {
+                kind = "success",
+                message = "已写入游戏在线缓存：" + chart.Title
+            });
+            await SendAsync("chartUpdated", new { id = chart.Id, downloaded = true });
+        }
+        catch (OperationCanceledException)
+        {
+            await SendAsync("operation", new { stage = "cancelled", message = "已取消" });
+        }
+        catch (Exception ex)
+        {
+            await SendAsync("operation", new { stage = "error", message = ex.Message });
+            await SendAsync("toast", new { kind = "error", message = "写入缓存失败：" + ex.Message });
+        }
+        finally
+        {
+            EndOperation();
+        }
+    }
+
+    private async Task SyncAllToCacheAsync()
+    {
+        if (!EnsureReady() || _folder is null || _operationRunning)
+        {
+            return;
+        }
+
+        if (_charts.Count == 0)
+        {
+            await SendAsync("toast", new { kind = "warning", message = "请先刷新曲目索引" });
+            return;
+        }
+
+        BeginOperation();
+        try
+        {
+            var inventory = await new InventoryStore(_folder.RootPath)
+                .LoadAsync(_operation!.Token);
+            var localCharts = _charts
+                .Where(chart => inventory.Charts.ContainsKey(chart.Id))
+                .Where(chart => Directory.Exists(Path.Combine(
+                    _folder.RootPath,
+                    inventory.Charts[chart.Id].Folder)))
+                .ToArray();
+            await SendAsync("operation", new
+            {
+                stage = "import",
+                message = $"准备写入 {localCharts.Length} 首曲目的在线缓存",
+                total = localCharts.Length,
+                completed = 0,
+                indeterminate = false
+            });
+            var written = 0;
+            var failed = 0;
+            for (var index = 0; index < localCharts.Length; index++)
+            {
+                _operation.Token.ThrowIfCancellationRequested();
+                var chart = localCharts[index];
+                var record = inventory.Charts[chart.Id];
+                try
+                {
+                    await OnlineCacheWriter.PublishAsync(
+                        _folder,
+                        chart,
+                        Path.Combine(_folder.RootPath, record.Folder),
+                        _operation.Token);
+                    written++;
+                }
+                catch
+                {
+                    failed++;
+                }
+
+                await SendAsync("operation", new
+                {
+                    stage = "import",
+                    message = $"正在写入在线缓存：{chart.Title}",
+                    completed = index + 1,
+                    total = localCharts.Length,
+                    succeeded = written,
+                    failed
+                });
+            }
+
+            await SendAsync("operation", new
+            {
+                stage = "done",
+                message = $"在线缓存完成：{written} 首成功，{failed} 首跳过"
+            });
+            await SendAsync("toast", new
+            {
+                kind = failed == 0 ? "success" : "warning",
+                message = $"已预热 {written} 首在线缓存"
+            });
+        }
+        catch (OperationCanceledException)
+        {
+            await SendAsync("operation", new { stage = "cancelled", message = "已停止写入缓存" });
+        }
+        finally
+        {
+            EndOperation();
+        }
+    }
+
     private async Task RefreshDashboardAsync()
     {
         if (_folder is null)
@@ -872,6 +1082,7 @@ internal sealed class AppController : IDisposable
                 var title = ChartInstaller.FindMaidataTitle(folder) ?? item.Title;
                 return (object)new
                 {
+                    id = item.ChartId,
                     title,
                     artist = item.Artist,
                     folder = item.Folder,
@@ -951,7 +1162,8 @@ internal sealed class AppController : IDisposable
             ["includeVideo"] = _settings.IncludeVideo,
             ["autoCheck"] = _settings.AutoCheck,
             ["downloadMode"] = _settings.DownloadMode,
-            ["useMirrors"] = _settings.UseMirrors
+            ["useMirrors"] = _settings.UseMirrors,
+            ["storageTarget"] = _settings.StorageTarget
         };
         if (firstRun is not null)
         {
@@ -1063,6 +1275,9 @@ internal sealed class AppController : IDisposable
             DateTimeStyles.None,
             out date);
     }
+
+    private static string ResolveStorageTarget(string value) =>
+        value is "both" or "local" or "cache" ? value : "both";
 
     public async Task<int> LoadIndexCountForTestAsync(CancellationToken cancellationToken)
     {

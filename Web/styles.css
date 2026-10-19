@@ -829,6 +829,11 @@ svg {
   background: #edfaf4;
 }
 
+.workflow-card.cache-wide {
+  grid-column: 1 / -1;
+  min-height: 74px;
+}
+
 .workflow-title {
   display: flex;
   align-items: center;
@@ -1390,6 +1395,21 @@ input[type="range"] {
   background: rgba(255, 255, 255, 0.018);
 }
 
+.recent-cache {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  margin-left: auto;
+  border-color: rgba(104, 162, 191, 0.16);
+  background: #f5fbff;
+  color: #6b9bb4;
+}
+
+.recent-cache svg {
+  width: 13px;
+  height: 13px;
+}
+
 .recent-thumb {
   display: grid;
   place-items: center;
@@ -1758,6 +1778,14 @@ input[type="range"] {
 .select-control:focus {
   border-color: #76c6e2;
   box-shadow: 0 0 0 3px rgba(118, 198, 226, 0.12);
+}
+
+.select-control.compact {
+  width: 132px;
+  min-width: 132px;
+  height: 36px;
+  padding-right: 22px;
+  font-size: 9px;
 }
 
 .network-route-list {
@@ -2254,6 +2282,7 @@ code {
   .hero h2 { font-size: 34px; }
   .workflow-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .workflow-card { min-height: 78px; }
+  .workflow-card.cache-wide { grid-column: 1 / -1; }
   .chart-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .recent-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .settings-layout { grid-template-columns: 1fr; }

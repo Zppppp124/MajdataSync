@@ -13,6 +13,7 @@
     'chevron-left': '<path d="m15 18-6-6 6-6"/>',
     'chevron-right': '<path d="m9 18 6-6-6-6"/>',
     'file-text': '<path d="M14 3H6v18h12V7l-4-4Z"/><path d="M14 3v5h4M9 13h6M9 17h6"/>',
+    database: '<ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v7c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 12v7c0 1.7 3.6 3 8 3s8-1.3 8-3v-7"/>',
     'calendar-days': '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/><path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/>',
     search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/>',
     calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/>',
@@ -51,6 +52,7 @@
     autoCheck: true,
     downloadMode: 'auto',
     useMirrors: true,
+    storageTarget: 'both',
     busy: false,
     tasks: new Map(),
     zipPath: '',
@@ -223,6 +225,9 @@
           <strong title="${escapeHtml(item.title)}">${escapeHtml(item.title)}</strong>
           <span>${escapeHtml(item.artist || item.folder)} · ${formatRelative(item.downloadedAt)}</span>
         </div>
+        <button class="icon-button recent-cache" data-cache-id="${escapeHtml(item.id || '')}" title="写入在线缓存" aria-label="写入在线缓存">
+          <span data-icon="database"></span>
+        </button>
       </div>`).join('');
     hydrateIcons(row);
   }
@@ -312,6 +317,7 @@
       autoCheck: $('#settingsAutoCheck').checked,
       downloadMode: $('#downloadMode').value || state.downloadMode
       ,useMirrors: $('#useMirrors').checked
+      ,storageTarget: state.storageTarget
     };
   }
 
@@ -338,7 +344,8 @@
       search: state.search || null,
       limit: extra.limit || null,
       includeVideo: $('#includeVideo').checked,
-      concurrency: Number($('#concurrencyRange').value || 6)
+      concurrency: Number($('#concurrencyRange').value || 6),
+      storageTarget: state.storageTarget
     });
     switchView('tasks');
   }
@@ -435,6 +442,18 @@
       switchView('settings');
       $('#testNetwork').focus();
     });
+    $('#cardCacheAll').addEventListener('click', () => {
+      if (!confirm('将已有的本地曲目写入 MajdataPlay 在线缓存，继续吗？')) return;
+      post('syncCacheAll');
+      switchView('tasks');
+    });
+    $('#recentRow').addEventListener('click', (event) => {
+      const button = event.target.closest('[data-cache-id]');
+      if (button?.dataset.cacheId) {
+        post('importCache', { id: button.dataset.cacheId });
+        switchView('tasks');
+      }
+    });
     $('#importZip').addEventListener('click', () => openModal('importModal'));
     $('#filterButton').addEventListener('click', () => $('#filterDrawer').classList.toggle('open'));
     $('#clearFilters').addEventListener('click', () => {
@@ -485,6 +504,23 @@
       showToast(
         state.useMirrors ? '已优先使用加速镜像' : '已切换为仅主站下载',
         'success');
+    });
+    $('#storageTarget').addEventListener('change', () => {
+      state.storageTarget = $('#storageTarget').value;
+      $('#settingsStorageTarget').value = state.storageTarget;
+      post('saveSettings', settingsPayload());
+      const labels = {
+        both: '本地 + 在线缓存',
+        cache: '仅写入 MajdataPlay 在线缓存',
+        local: '仅写入本地曲目库'
+      };
+      showToast('存放目标：' + labels[state.storageTarget], 'success');
+    });
+    $('#settingsStorageTarget').addEventListener('change', () => {
+      state.storageTarget = $('#settingsStorageTarget').value;
+      $('#storageTarget').value = state.storageTarget;
+      post('saveSettings', settingsPayload());
+      showToast('存放目标已保存', 'success');
     });
     $$('.stepper button').forEach((button) => button.addEventListener('click', () => {
       updateConcurrency(Number($('#settingsConcurrency').textContent) + Number(button.dataset.step));
@@ -601,6 +637,7 @@
           state.autoCheck = payload.autoCheck === true;
           state.downloadMode = payload.downloadMode || 'auto';
           state.useMirrors = payload.useMirrors !== false;
+          state.storageTarget = payload.storageTarget || 'both';
           updateNetworkModeUi();
           $('#concurrencyRange').value = state.concurrency;
           $('#concurrencyValue').textContent = state.concurrency;
@@ -610,6 +647,8 @@
           $('#settingsAutoCheck').checked = state.autoCheck;
           $('#downloadMode').value = state.downloadMode;
           $('#useMirrors').checked = state.useMirrors;
+          $('#storageTarget').value = state.storageTarget;
+          $('#settingsStorageTarget').value = state.storageTarget;
           if (payload.firstRun && !state.folder?.detected) openModal('tourModal');
           break;
         case 'autoCheckEnabled':

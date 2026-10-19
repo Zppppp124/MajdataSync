@@ -52,6 +52,7 @@ internal sealed class AppSettings
     public bool FirstRunCompleted { get; set; }
     public string DownloadMode { get; set; } = "auto";
     public bool UseMirrors { get; set; } = true;
+    public string StorageTarget { get; set; } = "both";
 }
 
 internal sealed class SyncRecord
@@ -99,6 +100,7 @@ internal sealed class SyncRequest
     public int Concurrency { get; set; } = 6;
     public string DownloadMode { get; set; } = "auto";
     public bool UseMirrors { get; set; } = true;
+    public string StorageTarget { get; set; } = "both";
 }
 
 internal sealed class ImportZipRequest

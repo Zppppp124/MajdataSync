@@ -14,6 +14,8 @@ Majdata Sync 是一个 Windows 桌面工具，用于从 [majdata.net](https://ma
 - 校验 ZIP 路径，阻止 `../` 等目录穿越内容。
 - 在 `Original\.majdata-sync-index.json` 记录同步状态，在每首曲目保存 `id` 与 `.majdata-sync.json`。
 - 可优先使用用户提供的同源加速镜像 `maj-3.moyingmoe.top`，不可用时依次回退 `maj-2`、`maj-1` 与主站；设置中可关闭镜像。
+- 可选择仅写本地曲目库、仅写 MajdataPlay 在线缓存，或两者同时写入。
+- 支持把现有本地曲目批量预热到 `Cache\Net\MajdataNET`，并按游戏规则生成 `.sha256`。
 
 ## 运行
 
