@@ -17,9 +17,9 @@ jobs:
         with:
           dotnet-version: 8.0.x
       - name: Publish
-        run: powershell -NoProfile -ExecutionPolicy Bypass -File .\MajdataSync\build-release.ps1
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File .\build-release.ps1
       - name: Archive
-        run: Compress-Archive -Path .\MajdataSync\publish\* -DestinationPath .\MajdataSync-win-x64.zip
+        run: Compress-Archive -Path .\publish\* -DestinationPath .\MajdataSync-win-x64.zip
       - name: Upload release asset
         uses: softprops/action-gh-release@v2
         env:
