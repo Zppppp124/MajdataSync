@@ -1,0 +1,487 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Majdata Sync</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark salt-avatar" aria-hidden="true"></div>
+        <div>
+          <div class="brand-name">MAJDATA <b>SYNC</b></div>
+          <div class="brand-sub">CHART LIBRARY · SALT EDITION</div>
+        </div>
+      </div>
+
+      <nav class="nav" aria-label="主导航">
+        <button class="nav-item active" data-view="library">
+          <span class="nav-icon" data-icon="grid"></span>
+          <span>曲目库</span>
+          <small id="navLibraryCount">—</small>
+        </button>
+        <button class="nav-item" data-view="tasks">
+          <span class="nav-icon" data-icon="activity"></span>
+          <span>传输队列</span>
+          <small id="navTaskCount">0</small>
+        </button>
+        <button class="nav-item" data-view="settings">
+          <span class="nav-icon" data-icon="sliders"></span>
+          <span>设置</span>
+        </button>
+      </nav>
+
+      <div class="path-panel">
+        <div class="path-label"><span class="status-dot" id="pathDot"></span> ORIGINAL 目录</div>
+        <div class="path-value" id="pathValue">等待识别…</div>
+        <div class="path-actions">
+          <button class="text-button" id="chooseFolder">选择目录</button>
+          <button class="icon-button small" id="openFolder" title="在资源管理器中打开" aria-label="打开目录"><span data-icon="folder-open"></span></button>
+        </div>
+      </div>
+
+      <div class="sidebar-foot">
+        <a href="#" id="siteLink" class="site-link">majdata.net <span data-icon="arrow-up-right"></span></a>
+        <span>本地同步工具 · v1.0</span>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div>
+          <div class="eyebrow" id="viewEyebrow">MAJDATA · 曲目小屋</div>
+          <h1 id="viewTitle">曲目库</h1>
+        </div>
+        <div class="top-actions">
+          <div class="connection-pill" id="connectionPill">
+            <span class="status-dot"></span>
+            <span id="connectionText">本地目录待识别</span>
+          </div>
+          <button class="button ghost" id="refreshIndex">
+            <span data-icon="refresh-cw"></span> 刷新索引
+          </button>
+          <button class="button primary" id="syncNew">
+            <span data-icon="download"></span> 同步新谱面
+          </button>
+        </div>
+      </header>
+
+      <section class="view active" id="view-library">
+        <div class="hero">
+          <div class="hero-copy">
+            <div class="eyebrow accent">MAJDATA · 轻松整理</div>
+            <h2>把喜欢的谱面<br><em>轻轻放进机台。</em></h2>
+            <p>搜索、挑选、下载和整理都在一个地方完成。新谱面会收进漂亮的曲目文件夹，随时都能开始游玩。</p>
+            <div class="hero-actions">
+              <button class="button primary large" id="downloadAll">
+                <span data-icon="layers"></span> 下载全部谱面
+              </button>
+              <button class="button outline large" id="importZip">
+                <span data-icon="file-archive"></span> 导入 ZIP
+              </button>
+            </div>
+            <div class="hero-stats">
+              <div><strong id="statCharts">—</strong><span>站点曲目</span></div>
+              <div><strong id="statLocal">—</strong><span>本地曲目夹</span></div>
+              <div><strong id="statTracked">—</strong><span>已同步记录</span></div>
+              <div><strong id="statLast">—</strong><span>上次同步</span></div>
+            </div>
+          </div>
+          <div class="hero-visual" aria-hidden="true">
+            <div class="hero-salt">
+              <img src="Assets/salt-hero.png" alt="">
+            </div>
+            <div class="orbit orbit-a"></div>
+            <div class="orbit orbit-b"></div>
+            <div class="hero-ring">
+              <div class="ring-core">
+                <span class="core-label">MAJDATA</span>
+                <strong id="heroRingValue">SYNC</strong>
+                <span class="core-meta">LIBRARY ONLINE</span>
+              </div>
+            </div>
+            <div class="floating-tag tag-one">自动整理</div>
+            <div class="floating-tag tag-two">多线程下载</div>
+            <div class="floating-tag tag-three">版本检查</div>
+          </div>
+        </div>
+
+        <div class="section-head">
+          <div>
+            <div class="eyebrow">QUICK START</div>
+            <h3>今天想做什么？</h3>
+          </div>
+        </div>
+        <div class="workflow-grid">
+          <button class="workflow-card" id="cardSync">
+            <div class="workflow-icon cyan"><span data-icon="refresh-cw"></span></div>
+            <div>
+              <div class="workflow-title">增量同步 <span class="badge" id="newCountBadge">0 NEW</span></div>
+              <p>只抓取未下载或站点哈希发生变化的新版本。</p>
+            </div>
+            <span class="workflow-arrow" data-icon="arrow-right"></span>
+          </button>
+          <button class="workflow-card" id="cardDate">
+            <div class="workflow-icon pink"><span data-icon="calendar-days"></span></div>
+            <div>
+              <div class="workflow-title">按日期更新</div>
+              <p>指定上传日期区间，补抓某个时间段的全部谱面。</p>
+            </div>
+            <span class="workflow-arrow" data-icon="arrow-right"></span>
+          </button>
+          <button class="workflow-card" id="cardImport">
+            <div class="workflow-icon yellow"><span data-icon="file-archive"></span></div>
+            <div>
+              <div class="workflow-title">导入本地 ZIP</div>
+              <p>按压缩包文件名建立文件夹，自动规范散落文件。</p>
+            </div>
+            <span class="workflow-arrow" data-icon="arrow-right"></span>
+          </button>
+          <button class="workflow-card network-card" id="cardNetwork">
+            <div class="workflow-icon mint"><span data-icon="gauge"></span></div>
+            <div>
+              <div class="workflow-title">网络加速 <span class="badge" id="networkModeBadge">AUTO</span></div>
+              <p id="networkCardText">自动选择低延迟 CDN 节点，大文件分段下载。</p>
+            </div>
+            <span class="workflow-arrow" data-icon="arrow-right"></span>
+          </button>
+        </div>
+
+        <div class="section-head catalog-head">
+          <div>
+            <div class="eyebrow">CHART CATALOG</div>
+            <h3>站点曲目</h3>
+          </div>
+          <div class="catalog-tools">
+            <label class="search-box">
+              <span data-icon="search"></span>
+              <input id="searchInput" type="search" placeholder="搜索曲名、曲师、谱师或上传者">
+              <kbd>⌘ K</kbd>
+            </label>
+            <div class="segmented" id="statusFilter">
+              <button class="active" data-filter="all">全部</button>
+              <button data-filter="new">未下载</button>
+              <button data-filter="downloaded">已入库</button>
+            </div>
+            <button class="icon-button" id="filterButton" title="日期筛选" aria-label="日期筛选"><span data-icon="calendar"></span></button>
+          </div>
+        </div>
+
+        <div class="filter-drawer" id="filterDrawer">
+          <div class="filter-field">
+            <label for="dateFrom">上传日期从</label>
+            <input type="date" id="dateFrom">
+          </div>
+          <div class="filter-field">
+            <label for="dateTo">到</label>
+            <input type="date" id="dateTo">
+          </div>
+          <div class="filter-field">
+            <label for="concurrencyRange">并行任务 <b id="concurrencyValue">6</b></label>
+            <input type="range" id="concurrencyRange" min="1" max="12" value="6">
+          </div>
+          <label class="switch-row compact">
+            <span>下载 PV 视频</span>
+            <input type="checkbox" id="includeVideo" checked>
+            <span class="switch"></span>
+          </label>
+          <div class="filter-actions">
+            <button class="button ghost" id="clearFilters">重置</button>
+            <button class="button primary" id="applyDateSync"><span data-icon="download"></span> 下载筛选结果</button>
+          </div>
+        </div>
+
+        <div class="catalog-meta">
+          <span id="catalogSummary">尚未读取索引</span>
+          <span id="indexTime"></span>
+        </div>
+        <div class="chart-grid" id="chartGrid"></div>
+        <div class="catalog-pager hidden" id="catalogPager">
+          <button class="icon-button" id="pagePrev" title="上一页" aria-label="上一页"><span data-icon="chevron-left"></span></button>
+          <div class="page-buttons" id="pageButtons"></div>
+          <button class="icon-button" id="pageNext" title="下一页" aria-label="下一页"><span data-icon="chevron-right"></span></button>
+          <span class="page-caption" id="pageCaption"></span>
+        </div>
+        <div class="empty-state hidden" id="catalogEmpty">
+          <div class="empty-art empty-salt"><span data-icon="music-4"></span></div>
+          <h4>还没有载入站点曲目</h4>
+          <p>刷新索引后会在这里显示 majdata.net 的最新谱面。</p>
+          <button class="button primary" id="emptyLoad"><span data-icon="refresh-cw"></span> 读取曲目索引</button>
+        </div>
+
+        <div class="recent-section">
+          <div class="section-head">
+            <div>
+              <div class="eyebrow">MY LIBRARY</div>
+              <h3>最近入库</h3>
+            </div>
+          </div>
+          <div class="recent-row" id="recentRow">
+            <div class="muted-note">完成下载后，最近入库的曲目会显示在这里。</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="view" id="view-tasks">
+        <div class="panel-head">
+          <div>
+            <div class="eyebrow">DOWNLOAD QUEUE</div>
+            <h2>下载队列</h2>
+            <p class="section-copy">并行下载与解压状态，失败任务可以保留缓存后重新同步。</p>
+          </div>
+          <button class="button danger ghost" id="cancelOperation"><span data-icon="square"></span> 停止任务</button>
+        </div>
+        <div class="queue-summary">
+          <div class="queue-stat">
+            <span>当前阶段</span>
+            <strong id="queueStage">空闲</strong>
+          </div>
+          <div class="queue-stat">
+            <span>完成任务</span>
+            <strong id="queueCompleted">0 / 0</strong>
+          </div>
+          <div class="queue-stat">
+            <span>下载速度</span>
+            <strong id="queueSpeed">—</strong>
+          </div>
+          <div class="queue-stat">
+            <span>结果</span>
+            <strong id="queueResult">等待任务</strong>
+          </div>
+        </div>
+        <div class="progress-track large"><div id="queueProgress"></div></div>
+        <div class="task-list" id="taskList">
+          <div class="empty-state compact" id="taskEmpty">
+            <div class="empty-art"><span data-icon="activity"></span></div>
+            <h4>队列为空</h4>
+            <p>开始同步后会实时显示每首曲目的下载状态。</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="view" id="view-settings">
+        <div class="panel-head">
+          <div>
+            <div class="eyebrow">PREFERENCES</div>
+            <h2>偏好设置</h2>
+            <p class="section-copy">这些设置会保存在本机，不会上传到 majdata.net。</p>
+          </div>
+        </div>
+        <div class="settings-layout">
+          <div class="settings-card">
+            <div class="settings-heading">
+              <div class="workflow-icon cyan"><span data-icon="folder-search-2"></span></div>
+              <div>
+                <h3>曲目目录</h3>
+                <p>选择游戏目录时会自动定位 MaiCharts\Original，不依赖盘符。</p>
+              </div>
+            </div>
+            <div class="setting-row">
+              <div>
+                <strong>当前 Original 路径</strong>
+                <span id="settingsPath">未识别</span>
+              </div>
+              <button class="button ghost" id="settingsChoose">更改</button>
+            </div>
+            <div class="setting-row">
+              <div>
+                <strong>自动查找游戏</strong>
+                <span>扫描本机常见目录与 MajdataPlay.exe 邻近路径</span>
+              </div>
+              <button class="button ghost" id="detectFolder"><span data-icon="wand-sparkles"></span> 自动识别</button>
+            </div>
+          </div>
+
+          <div class="settings-card">
+            <div class="settings-heading">
+              <div class="workflow-icon pink"><span data-icon="gauge"></span></div>
+              <div>
+                <h3>下载性能</h3>
+                <p>更高的并发能缩短大批量下载时间，但也会增加站点压力。</p>
+              </div>
+            </div>
+            <div class="setting-row">
+              <div>
+                <strong>并行曲目数</strong>
+                <span>建议 4 到 8，默认 6</span>
+              </div>
+              <div class="stepper">
+                <button data-step="-1" aria-label="减少并发">−</button>
+                <b id="settingsConcurrency">6</b>
+                <button data-step="1" aria-label="增加并发">+</button>
+              </div>
+            </div>
+            <div class="setting-row">
+              <div>
+                <strong>大文件分段下载</strong>
+                <span>支持时并行拉取多个 Range 数据块</span>
+              </div>
+              <select class="select-control" id="downloadMode">
+                <option value="auto">自动 · 推荐</option>
+                <option value="single">单连接 · 兼容</option>
+                <option value="2">双连接</option>
+                <option value="4">四连接</option>
+              </select>
+            </div>
+            <div class="setting-row">
+              <div>
+                <strong>CDN 节点测速</strong>
+                <span id="networkNodeStatus">自动选择延迟最低的可用节点</span>
+              </div>
+              <button class="button ghost" id="testNetwork"><span data-icon="gauge"></span> 自动测速</button>
+            </div>
+            <div class="network-route-list hidden" id="networkRouteList"></div>
+            <label class="switch-row">
+              <span>
+                <strong>优先使用加速镜像</strong>
+                <small>maj-3 / maj-2 / maj-1，失败时自动回退主站</small>
+              </span>
+              <input type="checkbox" id="useMirrors" checked>
+              <span class="switch"></span>
+            </label>
+            <label class="switch-row">
+              <span>
+                <strong>下载 PV 视频</strong>
+                <small>关闭后仅保留曲目、封面、谱面与 metadata</small>
+              </span>
+              <input type="checkbox" id="settingsVideo" checked>
+              <span class="switch"></span>
+            </label>
+            <label class="switch-row">
+              <span>
+                <strong>启动后检查更新</strong>
+                <small>程序打开时快速读取缓存索引，不自动开始下载</small>
+              </span>
+              <input type="checkbox" id="settingsAutoCheck" checked>
+              <span class="switch"></span>
+            </label>
+          </div>
+
+          <div class="settings-card wide">
+            <div class="settings-heading">
+              <div class="workflow-icon yellow"><span data-icon="info"></span></div>
+              <div>
+                <h3>目录规则</h3>
+                <p>下载后的结构符合 MajdataPlay 曲目文件夹规则，站点 ID 写入 <code>id</code> 文件用于下次增量比对。</p>
+              </div>
+            </div>
+            <div class="code-tree">
+              <div><span>Original</span></div>
+              <div class="tree-row"><span class="tree-line">├─</span><b>曲目标题</b><small>按 ZIP / 曲名生成文件夹</small></div>
+              <div class="tree-row indent"><span class="tree-line">├─</span>maidata.txt</div>
+              <div class="tree-row indent"><span class="tree-line">├─</span>track.mp3</div>
+              <div class="tree-row indent"><span class="tree-line">├─</span>bg.jpg</div>
+              <div class="tree-row indent"><span class="tree-line">├─</span>pv.mp4 <small>可选</small></div>
+              <div class="tree-row indent"><span class="tree-line">└─</span>id</div>
+            </div>
+            <div class="setting-row">
+              <div>
+                <strong>同步记录文件</strong>
+                <span>.majdata-sync-index.json</span>
+              </div>
+              <button class="button ghost" id="openFolderSettings"><span data-icon="folder-open"></span> 打开目录</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <footer class="app-footer">
+        <span>MAJDATA SYNC</span>
+        <span class="footer-sep"></span>
+        <span>为 MajdataPlay 曲目管理而设计</span>
+        <span class="footer-right" id="footerStatus">READY</span>
+      </footer>
+    </main>
+  </div>
+
+  <div class="operation-bar" id="operationBar" aria-live="polite">
+    <div class="op-spinner"></div>
+    <div class="op-copy">
+      <strong id="operationText">正在准备</strong>
+      <div class="progress-track"><div id="operationProgress"></div></div>
+    </div>
+    <span class="op-count" id="operationCount"></span>
+    <button class="icon-button" id="operationCancel" title="停止" aria-label="停止"><span data-icon="x"></span></button>
+  </div>
+
+  <div class="toast-stack" id="toastStack" aria-live="polite"></div>
+
+  <div class="modal-backdrop hidden" id="dateModal">
+    <div class="modal">
+      <div class="modal-head">
+        <div>
+          <div class="eyebrow">DATE RANGE</div>
+          <h3>按日期更新</h3>
+        </div>
+        <button class="icon-button" data-close-modal aria-label="关闭"><span data-icon="x"></span></button>
+      </div>
+      <p class="modal-copy">站点按上传时间记录谱面。选择日期后，程序会在当前索引中筛选并下载整个区间。</p>
+      <div class="date-presets">
+        <button data-preset="today">今天</button>
+        <button data-preset="7">最近 7 天</button>
+        <button data-preset="30">最近 30 天</button>
+        <button data-preset="month">本月</button>
+      </div>
+      <div class="modal-form">
+        <label>开始日期<input type="date" id="modalDateFrom"></label>
+        <span class="date-dash">—</span>
+        <label>结束日期<input type="date" id="modalDateTo"></label>
+      </div>
+      <label class="check-line"><input type="checkbox" id="modalOnlyNew" checked> 仅下载未入库或已更新的曲目</label>
+      <div class="modal-foot">
+        <button class="button ghost" data-close-modal>取消</button>
+        <button class="button primary" id="startDateSync"><span data-icon="download"></span> 开始下载</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop hidden" id="importModal">
+    <div class="modal import-modal">
+      <div class="modal-head">
+        <div>
+          <div class="eyebrow">LOCAL IMPORT</div>
+          <h3>导入 ZIP 谱面</h3>
+        </div>
+        <button class="icon-button" data-close-modal aria-label="关闭"><span data-icon="x"></span></button>
+      </div>
+      <div class="drop-zone" id="dropZone" tabindex="0">
+        <div class="drop-icon"><span data-icon="file-archive"></span></div>
+        <strong>点击选择一个 ZIP 文件</strong>
+        <span id="zipSelectedPath">解压后会在 Original 下按文件名创建曲目文件夹</span>
+        <input type="file" id="zipInput" accept=".zip,application/zip" hidden>
+      </div>
+      <div class="import-note">
+        <span data-icon="shield-check"></span>
+        <p>压缩包会先校验路径安全性，再解压到临时目录；检测到 <code>maidata.txt</code> 后才会移入曲目库。</p>
+      </div>
+      <div class="modal-foot">
+        <button class="button ghost" data-close-modal>取消</button>
+        <button class="button primary" id="startImport" disabled><span data-icon="unarchive"></span> 导入并解压</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop hidden" id="tourModal">
+    <div class="modal tour-modal">
+      <div class="tour-art">
+        <div class="tour-salt-wrap">
+          <img src="Assets/salt-avatar.webp" alt="">
+          <span class="tour-salt-badge" data-icon="refresh-cw"></span>
+        </div>
+      </div>
+            <div class="eyebrow accent">WELCOME TO MAJDATA</div>
+            <h3>先找到你的曲目小屋。</h3>
+      <p class="modal-copy">程序会自动寻找 MajdataPlay 的 <code>MaiCharts\Original</code>。换电脑后也只需要选择游戏根目录或 Original 文件夹，不绑定盘符。</p>
+      <div class="tour-actions">
+        <button class="button ghost" id="tourLater">稍后手动选择</button>
+        <button class="button primary" id="tourChoose"><span data-icon="folder-search-2"></span> 自动识别目录</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

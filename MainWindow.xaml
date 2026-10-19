@@ -1,0 +1,20 @@
+<Window x:Class="MajdataSync.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
+        Title="Majdata Sync"
+        Width="1260" Height="820"
+        MinWidth="980" MinHeight="650"
+        WindowStartupLocation="CenterScreen"
+        Background="#EDF6FF"
+        Icon="Assets/app.ico">
+    <Grid>
+        <wv2:WebView2 x:Name="WebView" DefaultBackgroundColor="#EDF6FF" />
+        <Grid x:Name="StartupShade" Background="#EDF6FF">
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                <TextBlock Text="MAJDATA SYNC" Foreground="#47729A" FontFamily="Bahnschrift" FontSize="30" FontWeight="SemiBold" HorizontalAlignment="Center" />
+                <TextBlock Text="正在准备本地界面..." Foreground="#86A1B9" FontFamily="Microsoft YaHei UI" FontSize="13" Margin="0,12,0,0" HorizontalAlignment="Center" />
+            </StackPanel>
+        </Grid>
+    </Grid>
+</Window>
