@@ -11,8 +11,8 @@
     <RootNamespace>MajdataSync</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
-    <Version>1.0.0</Version>
-    <FileVersion>1.0.0.0</FileVersion>
+    <Version>1.0.1</Version>
+    <FileVersion>1.0.1.0</FileVersion>
     <Product>Majdata Sync</Product>
     <Company>Majdata Sync</Company>
     <RepositoryUrl>https://github.com/Zppppp124/MajdataSync</RepositoryUrl>
