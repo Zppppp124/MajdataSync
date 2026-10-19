@@ -22,7 +22,11 @@ public partial class MainWindow : Window
         _controller = new AppController(this);
         Icon = BitmapFrame.Create(new Uri("pack://application:,,,/Assets/app.ico", UriKind.Absolute));
         Loaded += OnLoaded;
-        Closed += (_, _) => _controller.Dispose();
+        Closed += (_, _) =>
+        {
+            AppLogger.Write("Main window closed");
+            _controller.Dispose();
+        };
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)

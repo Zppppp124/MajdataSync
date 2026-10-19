@@ -8,8 +8,19 @@ public partial class App : System.Windows.Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        AppLogger.Write($"Application starting, version {typeof(App).Assembly.GetName().Version}");
+        AppDomain.CurrentDomain.UnhandledException += (_, args) =>
+        {
+            AppLogger.Write("Unhandled AppDomain exception", args.ExceptionObject as Exception);
+        };
+        TaskScheduler.UnobservedTaskException += (_, args) =>
+        {
+            AppLogger.Write("Unobserved task exception", args.Exception);
+            args.SetObserved();
+        };
         DispatcherUnhandledException += (_, args) =>
         {
+            AppLogger.Write("Unhandled UI exception", args.Exception);
             System.Windows.MessageBox.Show(args.Exception.Message, "Majdata Sync", MessageBoxButton.OK, MessageBoxImage.Error);
             args.Handled = true;
         };

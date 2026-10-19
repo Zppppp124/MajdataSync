@@ -103,6 +103,9 @@ internal sealed class AppController : IDisposable
             case "testNetwork":
                 await TestNetworkAsync();
                 break;
+            case "openLogs":
+                AppLogger.OpenLogFolder();
+                break;
             case "openChart":
                 OpenChart(payload);
                 break;

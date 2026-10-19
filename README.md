@@ -44,6 +44,7 @@ Original
 - 下载与 ZIP 导入使用 `Original` 同盘的隐藏工作目录 `.majdata-work`，因此跨盘安装无需搬运巨型临时文件；成功提交后自动清理对应缓存。
 - 全量索引没有站点总数接口，程序读取到连续空页后停止；索引缓存位于 `%LOCALAPPDATA%\MajdataSync\catalog.json`。
 - ZIP 导入要求包内包含 `maidata.txt`。
+- 运行日志位于 `%LOCALAPPDATA%\MajdataSync\logs`，设置页可直接打开。
 
 ## 从源码构建
 

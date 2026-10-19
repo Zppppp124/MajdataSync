@@ -12,6 +12,7 @@
     'arrow-right': '<path d="M5 12h14m-5-5 5 5-5 5"/>',
     'chevron-left': '<path d="m15 18-6-6 6-6"/>',
     'chevron-right': '<path d="m9 18 6-6-6-6"/>',
+    'file-text': '<path d="M14 3H6v18h12V7l-4-4Z"/><path d="M14 3v5h4M9 13h6M9 17h6"/>',
     'calendar-days': '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/><path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/>',
     search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/>',
     calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/>',
@@ -419,6 +420,7 @@
     $('#detectFolder').addEventListener('click', () => post('detectFolder'));
     $('#openFolder').addEventListener('click', () => post('openFolder'));
     $('#openFolderSettings').addEventListener('click', () => post('openFolder'));
+    $('#openLogs').addEventListener('click', () => post('openLogs'));
     $('#refreshIndex').addEventListener('click', () => post('loadIndex'));
     $('#emptyLoad').addEventListener('click', () => post('loadIndex'));
     $('#syncNew').addEventListener('click', () => requestSync(true));

@@ -65,11 +65,6 @@ internal sealed class ChartInstaller
         var targetFolder = ChooseFolder(root.RootPath, chart);
         var workRoot = Path.Combine(root.RootPath, ".majdata-work");
         var tempFolder = Path.Combine(workRoot, "downloads", chart.Id);
-        if (Directory.Exists(tempFolder))
-        {
-            Directory.Delete(tempFolder, recursive: true);
-        }
-
         Directory.CreateDirectory(tempFolder);
         TrySetHidden(workRoot);
         try
@@ -117,6 +112,15 @@ internal sealed class ChartInstaller
 
                     try
                     {
+                        var destination = Path.Combine(tempFolder, resource.Name);
+                        if (resource.Resource != "video" &&
+                            File.Exists(destination) &&
+                            new FileInfo(destination).Length > 0)
+                        {
+                            await progress($"{resource.Name} 已存在，跳过远程下载", 1.0);
+                            return;
+                        }
+
                         var hosts = await _api.MirrorHostsForDownloadAsync(token);
                         Exception? lastError = null;
                         foreach (var host in hosts)
