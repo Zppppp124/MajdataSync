@@ -2,6 +2,7 @@ bin/
 obj/
 publish/
 MajdataSync-win-x64/
+MajdataSync-win-x64-*.zip
 catalog-test/
 cross-volume-download/
 final-route-test/
