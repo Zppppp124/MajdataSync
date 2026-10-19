@@ -23,4 +23,11 @@ _*.cs
 !MajdataSync.Tests/
 MajdataSync.Tests/bin/
 MajdataSync.Tests/obj/
+majdata-settings-source/
+majdata-raw-source/
+majdata-extra-source/
+majdata-settings-summary.txt
+setting-details.txt
+*.part
+*.tmp
 

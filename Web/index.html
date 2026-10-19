@@ -28,6 +28,14 @@
           <span>传输队列</span>
           <small id="navTaskCount">0</small>
         </button>
+        <button class="nav-item" data-view="game">
+          <span class="nav-icon" data-icon="gamepad-2"></span>
+          <span>游戏管理</span>
+        </button>
+        <button class="nav-item" data-view="skins">
+          <span class="nav-icon" data-icon="palette"></span>
+          <span>皮肤</span>
+        </button>
         <button class="nav-item" data-view="settings">
           <span class="nav-icon" data-icon="sliders"></span>
           <span>设置</span>
@@ -45,7 +53,7 @@
 
       <div class="sidebar-foot">
         <a href="#" id="siteLink" class="site-link">majdata.net <span data-icon="arrow-up-right"></span></a>
-        <span>本地同步工具 · v1.0</span>
+        <span>本地同步工具 · v1.7.1</span>
       </div>
     </aside>
 
@@ -78,7 +86,7 @@
         <div class="hero">
           <div class="hero-copy">
             <div class="eyebrow accent">MAJDATA · 轻松整理</div>
-            <h2>把喜欢的谱面<br><em>轻轻放进机台。</em></h2>
+            <h2>给喜欢的谱面，<br><em>点一个大大的赞吧</em></h2>
             <p>搜索、挑选、下载和整理都在一个地方完成。新谱面会收进漂亮的曲目文件夹，随时都能开始游玩。</p>
             <div class="hero-actions">
               <button class="button primary large" id="downloadAll">
@@ -273,6 +281,146 @@
             <p>开始同步后会实时显示每首曲目的下载状态。</p>
           </div>
         </div>
+      </section>
+
+      <section class="view" id="view-game">
+        <div class="panel-head">
+          <div>
+            <div class="eyebrow">GAME MANAGER</div>
+            <h2>游戏管理</h2>
+            <p class="section-copy">安装、更新和启动 MajdataPlay，也可以直接修改游戏内置设置。</p>
+          </div>
+          <button class="button ghost" id="chooseGameFolder"><span data-icon="folder-open"></span> 选择游戏目录</button>
+        </div>
+        <div class="game-layout">
+          <div class="settings-card">
+            <div class="settings-heading">
+              <div class="workflow-icon cyan"><span data-icon="gamepad-2"></span></div>
+              <div>
+                <h3>MajdataPlay</h3>
+                <p id="gamePathText">尚未选择游戏目录</p>
+              </div>
+            </div>
+            <div class="setting-row">
+              <div>
+                <strong>安装来源</strong>
+                <span>CNB 国内线路实测明显更快，推荐使用</span>
+              </div>
+              <select class="select-control" id="gameSource">
+                <option value="cnb">CNB（推荐）</option>
+                <option value="github">GitHub（国际）</option>
+              </select>
+            </div>
+            <div class="setting-row">
+              <div>
+                <strong>完整游戏包</strong>
+                <span id="installGameHint">下载后自动解压到所选游戏目录</span>
+              </div>
+              <button class="button primary" id="installGame"><span data-icon="download"></span> 下载安装</button>
+            </div>
+            <div class="setting-row">
+              <div>
+                <strong>版本检查</strong>
+                <span id="gameUpdateText">检查游戏文件是否与最新构建一致</span>
+              </div>
+              <div class="inline-actions">
+                <button class="button ghost" id="checkGameUpdate"><span data-icon="refresh-cw"></span> 检查</button>
+                <button class="button ghost" id="updateGame" disabled><span data-icon="arrow-down-to-line"></span> 更新</button>
+              </div>
+            </div>
+            <div class="setting-row">
+              <div>
+                <strong>游戏目录</strong>
+                <span id="gameFolderPath">未设置</span>
+              </div>
+              <button class="button ghost" id="openGameFolder"><span data-icon="folder-open"></span> 打开目录</button>
+            </div>
+          </div>
+          <div class="settings-card">
+            <div class="settings-heading">
+              <div class="workflow-icon pink"><span data-icon="play"></span></div>
+              <div>
+                <h3>启动游戏</h3>
+                <p>选择渲染 API 或特殊模式后启动 MajdataPlay。</p>
+              </div>
+            </div>
+            <div class="setting-row">
+              <div>
+                <strong>启动方式</strong>
+                <span>普通用户保持默认即可</span>
+              </div>
+              <select class="select-control" id="launchOption">
+                <option value="default">默认启动</option>
+                <option value="d3d11">强制 D3D11</option>
+                <option value="d3d12">强制 D3D12</option>
+                <option value="opengl">强制 OpenGL</option>
+                <option value="vulkan">强制 Vulkan</option>
+                <option value="test">测试模式</option>
+                <option value="edit">谱面编辑模式</option>
+              </select>
+            </div>
+            <button class="button primary wide-button" id="launchGame"><span data-icon="play"></span> 启动 MajdataPlay</button>
+          </div>
+        </div>
+        <div class="section-head">
+          <div>
+            <div class="eyebrow">GAME SETTINGS</div>
+            <h3>内置设置</h3>
+          </div>
+          <button class="button ghost" id="saveGameSettings"><span data-icon="save"></span> 保存设置</button>
+        </div>
+        <div class="game-settings-grid" id="gameSettingsGrid"></div>
+        <details class="advanced-settings" id="advancedSettings">
+          <summary>
+            <span><span data-icon="file-text"></span> 高级设置</span>
+            <small>修改内置设置中未展示的 settings.json 字段</small>
+          </summary>
+          <div class="advanced-settings-body">
+            <div class="advanced-settings-actions">
+              <span id="advancedSettingsHint">读取后再修改，普通设置与高级设置分开保存。</span>
+              <span class="advanced-settings-buttons">
+                <button class="button ghost" id="loadAdvancedSettings"><span data-icon="refresh-cw"></span> 读取当前配置</button>
+                <button class="button primary" id="saveAdvancedSettings" disabled><span data-icon="save"></span> 保存高级设置</button>
+              </span>
+            </div>
+            <label class="advanced-search">
+              <span data-icon="search"></span>
+              <input type="search" id="advancedSettingsSearch" placeholder="搜索设置，例如 Volume、Debug、皮肤">
+              <small id="advancedSearchCount">输入名称或分组快速定位</small>
+            </label>
+            <div class="advanced-settings-grid" id="advancedSettingsGrid"></div>
+          </div>
+        </details>
+      </section>
+
+      <section class="view" id="view-skins">
+        <div class="panel-head">
+          <div>
+            <div class="eyebrow">SKIN LIBRARY</div>
+            <h2>皮肤</h2>
+            <p class="section-copy">下载社区皮肤到游戏 Skins 目录，并在这里直接切换当前皮肤。</p>
+          </div>
+          <button class="button ghost" id="refreshSkins"><span data-icon="refresh-cw"></span> 刷新列表</button>
+        </div>
+        <div class="section-head">
+          <div>
+            <div class="eyebrow">ONLINE SKINS</div>
+            <h3>在线皮肤</h3>
+          </div>
+          <span class="skin-count" id="onlineSkinCount"></span>
+        </div>
+        <div class="skin-note" id="skinSourceNote">
+          <span data-icon="info"></span>
+          <span>在线列表来自 CNB，失败时自动切换 GitHub。</span>
+        </div>
+        <div class="skin-grid" id="skinGrid"></div>
+        <div class="section-head">
+          <div>
+            <div class="eyebrow">INSTALLED</div>
+            <h3>已安装皮肤</h3>
+          </div>
+        </div>
+        <div class="installed-skin-grid" id="installedSkins"></div>
       </section>
 
       <section class="view" id="view-settings">
@@ -513,6 +661,7 @@
     </div>
   </div>
 
+  <script src="settings-metadata.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

@@ -19,8 +19,6 @@ internal sealed class ChartApi : IDisposable
     public const string SiteUrl = "https://majdata.net";
     public const string ApiRoot = SiteUrl + "/api3/api";
     private const int PageSize = 30;
-    private const int ScanParallelism = 12;
-    private const int MaxConsecutiveEmptyPages = 2;
     private readonly HttpClient _http;
     private readonly Dictionary<string, HttpClient> _mirrorClients = new(StringComparer.OrdinalIgnoreCase);
     private readonly SocketsHttpHandler _handler;
@@ -62,6 +60,7 @@ internal sealed class ChartApi : IDisposable
     public static string Video(string id) => ChartRoot(id) + "/video";
 
     public string? BestNode { get; private set; }
+    public string? LastIndexError { get; private set; }
 
     public async Task<IReadOnlyList<SiteRoute>> RefreshNetworkNodesAsync(CancellationToken cancellationToken)
     {
@@ -362,7 +361,83 @@ internal sealed class ChartApi : IDisposable
         IProgress<string>? status,
         CancellationToken cancellationToken)
     {
-        status?.Report("正在读取站点曲目索引…");
+        status?.Report("正在读取完整曲目索引…");
+        var batch = await FetchFullCatalogAsync(cancellationToken);
+        if (batch.Count > 0)
+        {
+            status?.Report($"索引完成，共发现 {batch.Count:N0} 首曲目");
+            return batch
+                .OrderByDescending(chart => chart.Timestamp)
+                .ThenBy(chart => chart.Title, StringComparer.CurrentCultureIgnoreCase)
+                .ToList();
+        }
+
+        status?.Report("完整索引不可用，正在使用分页兼容模式…");
+        return await GetAllChartsByPagesAsync(status, cancellationToken);
+    }
+
+    private async Task<List<ChartItem>> FetchFullCatalogAsync(CancellationToken cancellationToken)
+    {
+        await _network.EnsureAsync(
+            SettingsStore.Load().UseMirrors,
+            443,
+            cancellationToken);
+        var hosts = MirrorHosts().ToList();
+        var errors = new List<string>();
+        foreach (var host in hosts)
+        {
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeout.CancelAfter(TimeSpan.FromSeconds(75));
+            try
+            {
+                var url = $"{MirrorSelector.ApiRoot(host)}/maichart/list?limit=99999";
+                using var request = new HttpRequestMessage(HttpMethod.Get, url);
+                request.Headers.Referrer = new Uri($"https://{host}/");
+                using var response = await MirrorClient(host).SendAsync(
+                    request,
+                    HttpCompletionOption.ResponseHeadersRead,
+                    timeout.Token);
+                if (!response.IsSuccessStatusCode)
+                {
+                    errors.Add($"{host}: HTTP {(int)response.StatusCode}");
+                    continue;
+                }
+
+                await using var stream = await response.Content.ReadAsStreamAsync(timeout.Token);
+                var items = await JsonSerializer.DeserializeAsync<List<ChartItem>>(
+                    stream,
+                    JsonOptions.Default,
+                    timeout.Token) ?? [];
+                if (items.Count > 0)
+                {
+                    _lastGoodMirror = host;
+                    _lastIndexHost = host;
+                    return items;
+                }
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                errors.Add($"{host}: 超时");
+                _sessionFailedHosts.Add(host);
+            }
+            catch (Exception ex)
+            {
+                errors.Add($"{host}: {ex.Message}");
+            }
+        }
+
+        if (errors.Count > 0)
+        {
+            LastIndexError = string.Join("；", errors);
+        }
+        Interlocked.Increment(ref _consecutiveFailures);
+        return [];
+    }
+
+    private async Task<List<ChartItem>> GetAllChartsByPagesAsync(
+        IProgress<string>? status,
+        CancellationToken cancellationToken)
+    {
         var firstPage = await FetchPageAsync(0, cancellationToken);
         if (firstPage.Count == 0)
         {
@@ -372,44 +447,21 @@ internal sealed class ChartApi : IDisposable
         var results = new Dictionary<string, ChartItem>(StringComparer.OrdinalIgnoreCase);
         AddPage(results, firstPage);
         var page = 1;
-        var consecutiveEmptyPages = 0;
-
-        while (consecutiveEmptyPages < MaxConsecutiveEmptyPages)
+        var missedBatches = 0;
+        while (missedBatches < 2)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var pages = Enumerable.Range(page, ScanParallelism).ToArray();
+            var pages = Enumerable.Range(page, 16).ToArray();
             var tasks = pages.Select(p => FetchPageSafeAsync(p, cancellationToken)).ToArray();
             var pageResults = await Task.WhenAll(tasks);
-
-            foreach (var item in pageResults)
+            var received = pageResults.Where(item => item.Count > 0).ToArray();
+            foreach (var item in received)
             {
-                if (item.Count == 0)
-                {
-                    consecutiveEmptyPages++;
-                }
-                else
-                {
-                    consecutiveEmptyPages = 0;
-                    AddPage(results, item);
-                }
+                AddPage(results, item);
             }
 
-            if (pageResults.All(item => item.Count == 0))
-            {
-                var retryTasks = pages
-                    .Select(p => FetchPageSafeAsync(p, cancellationToken))
-                    .ToArray();
-                foreach (var item in await Task.WhenAll(retryTasks))
-                {
-                    if (item.Count > 0)
-                    {
-                        consecutiveEmptyPages = 0;
-                        AddPage(results, item);
-                    }
-                }
-            }
-
-            page += ScanParallelism;
+            missedBatches = received.Length == 0 ? missedBatches + 1 : 0;
+            page += 16;
             status?.Report($"正在读取站点曲目索引… 已发现 {results.Count:N0} 首");
         }
 
@@ -485,9 +537,40 @@ internal sealed class ChartApi : IDisposable
         string destination,
         IProgress<DownloadProgress>? progress,
         CancellationToken cancellationToken,
-        int segmentCount = 0)
+        int segmentCount = 0,
+        TimeSpan? stallTimeout = null)
     {
         var uri = new Uri(url);
+        if (uri.Host.Equals("cnb.cool", StringComparison.OrdinalIgnoreCase) ||
+            uri.Host.EndsWith("github.com", StringComparison.OrdinalIgnoreCase) ||
+            uri.Host.EndsWith("githubusercontent.com", StringComparison.OrdinalIgnoreCase))
+        {
+            using var standardHandler = new SocketsHttpHandler
+            {
+                AutomaticDecompression = DecompressionMethods.All,
+                ConnectTimeout = TimeSpan.FromSeconds(20),
+                PooledConnectionLifetime = TimeSpan.FromMinutes(5),
+                MaxConnectionsPerServer = 8
+            };
+            using var standardHttp = new HttpClient(standardHandler)
+            {
+                Timeout = Timeout.InfiniteTimeSpan
+            };
+            standardHttp.DefaultRequestHeaders.UserAgent.ParseAdd(
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
+                "(KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36 MajdataSync/1.3");
+            standardHttp.DefaultRequestHeaders.Referrer = new Uri(uri.GetLeftPart(UriPartial.Authority) + "/");
+            await DownloadWithClientAsync(
+                standardHttp,
+                url,
+                destination,
+                progress,
+                cancellationToken,
+                segmentCount,
+                stallTimeout);
+            return;
+        }
+
         if (!uri.Host.Equals("majdata.net", StringComparison.OrdinalIgnoreCase))
         {
             var addresses = await _network.GetAddressesAsync(uri.Host, uri.Port, cancellationToken);
@@ -536,7 +619,8 @@ internal sealed class ChartApi : IDisposable
                 destination,
                 progress,
                 cancellationToken,
-                segmentCount);
+                segmentCount,
+                stallTimeout);
             return;
         }
 
@@ -546,7 +630,8 @@ internal sealed class ChartApi : IDisposable
             destination,
             progress,
             cancellationToken,
-            segmentCount);
+            segmentCount,
+            stallTimeout);
     }
 
     private async Task DownloadWithClientAsync(
@@ -555,7 +640,8 @@ internal sealed class ChartApi : IDisposable
         string destination,
         IProgress<DownloadProgress>? progress,
         CancellationToken cancellationToken,
-        int segmentCount)
+        int segmentCount,
+        TimeSpan? stallTimeout = null)
     {
         if (segmentCount <= 0)
         {
@@ -579,7 +665,8 @@ internal sealed class ChartApi : IDisposable
                         destination,
                         progress,
                         segmentCount,
-                        cancellationToken))
+                        cancellationToken,
+                        stallTimeout))
                 {
                     return;
                 }
@@ -594,7 +681,13 @@ internal sealed class ChartApi : IDisposable
             }
         }
 
-        await DownloadSingleAsync(client, url, destination, progress, cancellationToken);
+        await DownloadSingleAsync(
+            client,
+            url,
+            destination,
+            progress,
+            cancellationToken,
+            stallTimeout);
     }
 
     private async Task DownloadSingleAsync(
@@ -602,7 +695,8 @@ internal sealed class ChartApi : IDisposable
         string url,
         string destination,
         IProgress<DownloadProgress>? progress,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        TimeSpan? stallTimeout = null)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
         var temp = destination + ".part";
@@ -655,9 +749,9 @@ internal sealed class ChartApi : IDisposable
                         progress?.Report(new DownloadProgress(received, total, speed));
                     }
 
-                    if (lastProgress.ElapsedMilliseconds >= 90_000)
+                    if (lastProgress.Elapsed >= (stallTimeout ?? TimeSpan.FromSeconds(90)))
                     {
-                        throw new IOException("下载超时：90 秒内没有收到新数据");
+                        throw new IOException("下载超时：长时间没有收到新数据");
                     }
                 }
 
@@ -680,13 +774,16 @@ internal sealed class ChartApi : IDisposable
         string destination,
         IProgress<DownloadProgress>? progress,
         int requestedSegments,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        TimeSpan? stallTimeout = null)
     {
+        var maxStall = stallTimeout ?? TimeSpan.FromSeconds(90);
         long? total;
         using var probeCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         probeCancellation.CancelAfter(TimeSpan.FromSeconds(18));
-        using (var probe = new HttpRequestMessage(HttpMethod.Get, url))
+        try
         {
+            using var probe = new HttpRequestMessage(HttpMethod.Get, url);
             probe.Headers.Range = new System.Net.Http.Headers.RangeHeaderValue(0, 0);
             using var response = await client.SendAsync(
                 probe,
@@ -699,6 +796,14 @@ internal sealed class ChartApi : IDisposable
             }
 
             total = response.Content.Headers.ContentRange?.Length;
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return false;
+        }
+        catch (HttpRequestException)
+        {
+            return false;
         }
 
         if (total is null || total < 3 * 1024 * 1024)
@@ -752,6 +857,7 @@ internal sealed class ChartApi : IDisposable
                     128 * 1024,
                     FileOptions.Asynchronous | FileOptions.SequentialScan);
                 var buffer = new byte[128 * 1024];
+                var partWatch = System.Diagnostics.Stopwatch.StartNew();
                 while (true)
                 {
                     var read = await source.ReadAsync(buffer, transferTimeout.Token);
@@ -764,12 +870,18 @@ internal sealed class ChartApi : IDisposable
                     Interlocked.Add(ref receivedPerPart[index], read);
                     var received = Interlocked.Add(ref totalReceived, read);
                     Interlocked.Add(ref meterBytes, read);
+                    partWatch.Restart();
                     if (meter.ElapsedMilliseconds >= 250)
                     {
                         var bytesThisSample = Interlocked.Exchange(ref meterBytes, 0);
                         speed = bytesThisSample / Math.Max(0.001, meter.Elapsed.TotalSeconds);
                         meter.Restart();
                         progress?.Report(new DownloadProgress(received, totalBytes, speed));
+                    }
+
+                    if (partWatch.Elapsed > maxStall)
+                    {
+                        throw new IOException("下载超时：长时间没有收到新数据");
                     }
                 }
 

@@ -10,6 +10,7 @@ internal sealed class AppController : IDisposable
 {
     private readonly MainWindow? _window;
     private readonly ChartApi _api = new();
+    private readonly GameManager _game;
     private AppSettings _settings = SettingsStore.Load();
     private FolderInfo? _folder;
     private CancellationTokenSource? _operation;
@@ -18,10 +19,13 @@ internal sealed class AppController : IDisposable
     private DateTimeOffset? _lastIndexAt;
     private SyncInventory? _inventory;
     private CatalogSummary? _catalogSummary;
+    private List<GameHashEntry> _pendingGameUpdates = [];
+    private bool _catalogRefreshRunning;
 
     public AppController(MainWindow? window)
     {
         _window = window;
+        _game = new GameManager(_api);
     }
 
     public async Task InitializeAsync()
@@ -36,6 +40,8 @@ internal sealed class AppController : IDisposable
         await SendAsync("folder", FolderPayload(_folder));
         await SendSettingsAsync(firstRun: !_settings.FirstRunCompleted);
         await SendStateAsync();
+        await LoadCachedCatalogAsync();
+        await SendAsync("gameSource", new { source = _settings.GameDownloadSource });
         await SendAsync("networkNode", new
         {
             node = "",
@@ -50,13 +56,9 @@ internal sealed class AppController : IDisposable
 
         await RefreshDashboardAsync();
         _ = MeasureNetworkInBackgroundAsync();
-        if (!_settings.FirstRunCompleted && _settings.AutoCheck)
+        if (_settings.AutoCheck)
         {
-            await SendAsync("promptIndex", new
-            {
-                title = "是否读取站点索引？",
-                message = "已识别你的曲目目录。现在联网读取 majdata.net 的完整曲目索引吗？\n\n你也可以稍后点击“刷新索引”。"
-            });
+            _ = InitializeCatalogInBackgroundAsync();
         }
     }
 
@@ -80,7 +82,7 @@ internal sealed class AppController : IDisposable
                 await EnableAutoCheckAsync();
                 break;
             case "loadIndex":
-                await LoadIndexAsync(useCache: false);
+                _ = ReloadIndexInBackgroundAsync();
                 break;
             case "queryCatalog":
                 await SendCatalogPageAsync(payload, CancellationToken.None);
@@ -103,6 +105,9 @@ internal sealed class AppController : IDisposable
             case "testNetwork":
                 await TestNetworkAsync();
                 break;
+            case "testOnlineSources":
+                await TestOnlineSourcesAsync();
+                break;
             case "openLogs":
                 AppLogger.OpenLogFolder();
                 break;
@@ -111,6 +116,45 @@ internal sealed class AppController : IDisposable
                 break;
             case "syncCacheAll":
                 await SyncAllToCacheAsync();
+                break;
+            case "gameStatus":
+                await SendGameStatusAsync();
+                break;
+            case "chooseGameFolder":
+                await ChooseGameFolderAsync();
+                break;
+            case "installGame":
+                await InstallGameAsync(payload);
+                break;
+            case "checkGameUpdate":
+                await CheckGameUpdateAsync();
+                break;
+            case "updateGame":
+                await UpdateGameAsync();
+                break;
+            case "launchGame":
+                LaunchGame(payload);
+                break;
+            case "openGameFolder":
+                OpenGameFolder();
+                break;
+            case "loadSkins":
+                await LoadSkinsAsync();
+                break;
+            case "installSkin":
+                await InstallSkinAsync(payload);
+                break;
+            case "applySkin":
+                await ApplySkinAsync(payload);
+                break;
+            case "loadGameSettings":
+                await LoadGameSettingsAsync();
+                break;
+            case "saveGameSettings":
+                await SaveGameSettingsAsync(payload);
+                break;
+            case "saveGameSource":
+                await SaveGameSourceAsync(payload);
                 break;
             case "openChart":
                 OpenChart(payload);
@@ -277,6 +321,512 @@ internal sealed class AppController : IDisposable
         }
     }
 
+    private async Task TestOnlineSourcesAsync()
+    {
+        await SendAsync("onlineSourceTesting", new { message = "正在测试本站与镜像延迟…" });
+        try
+        {
+            var routes = await _api.RefreshNetworkNodesAsync(CancellationToken.None);
+            var sources = routes
+                .Select(route => new
+                {
+                    host = route.Host,
+                    url = MirrorSelector.ApiRoot(route.Host) + "/",
+                    latencyMs = route.Available ? route.LatencyMs : (long?)null,
+                    available = route.Available,
+                    addresses = route.Addresses.Select(address => address.ToString()).ToArray()
+                })
+                .ToArray();
+            await SendAsync("onlineSourceLatency", new
+            {
+                sources,
+                fastest = sources
+                    .Where(source => source.available)
+                    .OrderBy(source => source.latencyMs)
+                    .FirstOrDefault()?.host ?? "",
+                testedAt = DateTimeOffset.Now
+            });
+        }
+        catch (Exception ex)
+        {
+            await SendAsync("onlineSourceLatency", new
+            {
+                sources = Array.Empty<object>(),
+                fastest = "",
+                testedAt = DateTimeOffset.Now,
+                error = ex.Message
+            });
+        }
+    }
+
+    private string? CurrentGameRoot =>
+        !string.IsNullOrWhiteSpace(_settings.GameRootPath) &&
+        Directory.Exists(_settings.GameRootPath)
+            ? NormalizeGameRoot(_settings.GameRootPath)
+            : _folder?.GameRoot;
+
+    private static string NormalizeGameRoot(string root)
+    {
+        var exe = Directory.Exists(root)
+            ? Directory.GetFiles(root, "MajdataPlay.exe", SearchOption.TopDirectoryOnly).FirstOrDefault()
+            : null;
+        return exe is null ? root : Path.GetDirectoryName(exe)!;
+    }
+
+    private async Task ChooseGameFolderAsync()
+    {
+        var dialog = new Microsoft.Win32.OpenFolderDialog
+        {
+            Title = "选择 MajdataPlay 游戏目录",
+            Multiselect = false,
+            InitialDirectory = CurrentGameRoot ?? Environment.GetFolderPath(
+                Environment.SpecialFolder.DesktopDirectory)
+        };
+        if (dialog.ShowDialog(_window) != true)
+        {
+            return;
+        }
+
+        var selected = Path.GetFullPath(dialog.FolderName);
+        var exe = Directory.GetFiles(selected, "MajdataPlay.exe", SearchOption.AllDirectories)
+            .FirstOrDefault();
+        if (exe is not null)
+        {
+            selected = Path.GetDirectoryName(exe)!;
+        }
+
+        _settings.GameRootPath = selected;
+        SettingsStore.Save(_settings);
+        var detectedFolder = FolderDetector.DetectFrom(selected);
+        if (detectedFolder is not null)
+        {
+            _folder = detectedFolder;
+            _settings.LastRootPath = detectedFolder.RootPath;
+            SettingsStore.Save(_settings);
+            await SendAsync("folder", FolderPayload(detectedFolder));
+        }
+        await SendGameStatusAsync();
+        await SendAsync("toast", new
+        {
+            kind = "success",
+            message = GameManager.IsInstalled(selected)
+                ? "已选择游戏目录：" + selected
+                : "已选择安装目录，可继续下载游戏"
+        });
+    }
+
+    private async Task SaveGameSourceAsync(JsonElement payload)
+    {
+        var source = GetString(payload, "source");
+        _settings.GameDownloadSource = source.Equals("github", StringComparison.OrdinalIgnoreCase)
+            ? "github"
+            : "cnb";
+        SettingsStore.Save(_settings);
+        await SendAsync("gameSource", new { source = _settings.GameDownloadSource });
+    }
+
+    private async Task SendGameStatusAsync()
+    {
+        var root = CurrentGameRoot;
+        await SendAsync("gameStatus", new
+        {
+            gameRoot = root ?? "",
+            installed = root is not null && GameManager.IsInstalled(root),
+            source = _settings.GameDownloadSource,
+            recommendedSource = "cnb",
+            skins = root is null ? new List<SkinItem>() : GameManager.GetInstalledSkins(root)
+        });
+    }
+
+    private async Task InstallGameAsync(JsonElement payload)
+    {
+        if (_operationRunning)
+        {
+            return;
+        }
+
+        var dialog = new Microsoft.Win32.OpenFolderDialog
+        {
+            Title = "选择 MajdataPlay 安装目录",
+            Multiselect = false,
+            InitialDirectory = CurrentGameRoot ?? Environment.GetFolderPath(
+                Environment.SpecialFolder.DesktopDirectory)
+        };
+        if (dialog.ShowDialog(_window) != true)
+        {
+            return;
+        }
+
+        BeginOperation();
+        try
+        {
+            var source = GetString(payload, "source");
+            var useCnb = !source.Equals("github", StringComparison.OrdinalIgnoreCase);
+            var selected = Path.GetFullPath(dialog.FolderName);
+            var gameAlreadyExists = Directory.GetFiles(
+                selected,
+                "MajdataPlay.exe",
+                SearchOption.TopDirectoryOnly).Length > 0;
+            var isGameFolder = string.Equals(
+                Path.GetFileName(Path.TrimEndingDirectorySeparator(selected)),
+                "MajdataPlay",
+                StringComparison.OrdinalIgnoreCase);
+            var target = gameAlreadyExists || isGameFolder
+                ? selected
+                : Path.Combine(selected, "MajdataPlay");
+            _settings.GameRootPath = target;
+            _settings.GameDownloadSource = useCnb ? "cnb" : "github";
+            SettingsStore.Save(_settings);
+            var status = new Progress<(string Message, double? Progress)>(value =>
+                _ = SendAsync("operation", new
+                {
+                    stage = "download",
+                    message = value.Message,
+                    progress = value.Progress
+                }));
+            await _game.InstallGameAsync(target, useCnb, status, _operation!.Token);
+            var detected = FolderDetector.DetectFrom(target);
+            if (detected is not null)
+            {
+                _folder = detected;
+                _settings.LastRootPath = detected.RootPath;
+                SettingsStore.Save(_settings);
+                await SendAsync("folder", FolderPayload(detected));
+            }
+            await SendAsync("operation", new { stage = "done", message = "游戏安装完成" });
+            await SendGameStatusAsync();
+            await SendAsync("toast", new
+            {
+                kind = "success",
+                message = "MajdataPlay 已安装到 " + target
+            });
+        }
+        catch (OperationCanceledException)
+        {
+            await SendAsync("operation", new { stage = "cancelled", message = "已取消安装" });
+        }
+        catch (Exception ex)
+        {
+            await SendAsync("operation", new { stage = "error", message = ex.Message });
+            await SendAsync("toast", new { kind = "error", message = "安装失败：" + ex.Message });
+        }
+        finally
+        {
+            EndOperation();
+        }
+    }
+
+    private async Task CheckGameUpdateAsync()
+    {
+        var root = CurrentGameRoot;
+        if (root is null || !GameManager.IsInstalled(root))
+        {
+            await SendAsync("toast", new { kind = "warning", message = "请先安装或选择游戏目录" });
+            return;
+        }
+
+        BeginOperation();
+        try
+        {
+            var source = _settings.GameDownloadSource != "github";
+            _pendingGameUpdates = (await _game.CheckGameUpdateAsync(
+                root,
+                source,
+                _operation!.Token)).Files;
+            await SendAsync("gameUpdates", new
+            {
+                count = _pendingGameUpdates.Count,
+                files = _pendingGameUpdates.Take(30).Select(item => item.FilePath).ToArray()
+            });
+            await SendAsync("operation", new
+            {
+                stage = "done",
+                message = _pendingGameUpdates.Count == 0
+                    ? "游戏已是最新版本"
+                    : $"发现 {_pendingGameUpdates.Count} 个文件需要更新"
+            });
+        }
+        catch (Exception ex)
+        {
+            await SendAsync("operation", new { stage = "error", message = ex.Message });
+        }
+        finally
+        {
+            EndOperation();
+        }
+    }
+
+    private async Task UpdateGameAsync()
+    {
+        var root = CurrentGameRoot;
+        if (root is null || _operationRunning)
+        {
+            return;
+        }
+
+        BeginOperation();
+        try
+        {
+            if (_pendingGameUpdates.Count == 0)
+            {
+                _pendingGameUpdates = (await _game.CheckGameUpdateAsync(
+                    root,
+                    _settings.GameDownloadSource != "github",
+                    _operation!.Token)).Files;
+            }
+            if (_pendingGameUpdates.Count == 0)
+            {
+                await SendAsync("operation", new { stage = "done", message = "游戏已是最新版本" });
+                await SendAsync("gameUpdates", new { count = 0, files = Array.Empty<string>() });
+                return;
+            }
+
+            await SendAsync("operation", new
+            {
+                stage = "download",
+                message = $"准备更新 {_pendingGameUpdates.Count:N0} 个游戏文件，断点会自动续传…",
+                progress = 0
+            });
+            var status = new Progress<(string Message, double? Progress)>(value =>
+                _ = SendAsync("operation", new
+                {
+                    stage = "download",
+                    message = value.Message,
+                    progress = value.Progress,
+                    indeterminate = value.Progress is null
+                }));
+            await _game.UpdateGameAsync(
+                root,
+                _settings.GameDownloadSource != "github",
+                _pendingGameUpdates,
+                status,
+                _operation!.Token);
+            await SendAsync("operation", new
+            {
+                stage = "index",
+                message = "文件更新完成，正在校验游戏完整性…",
+                indeterminate = true
+            });
+            var remaining = (await _game.CheckGameUpdateAsync(
+                root,
+                _settings.GameDownloadSource != "github",
+                _operation!.Token)).Files;
+            _pendingGameUpdates = remaining;
+            await SendAsync("gameUpdates", new
+            {
+                count = remaining.Count,
+                files = remaining.Take(30).Select(item => item.FilePath).ToArray()
+            });
+            await SendAsync("operation", new
+            {
+                stage = "done",
+                message = remaining.Count == 0
+                    ? "游戏更新完成，所有文件已校验通过"
+                    : $"更新已执行，仍有 {remaining.Count:N0} 个文件未通过校验"
+            });
+            await SendGameStatusAsync();
+            await SendAsync("toast", new
+            {
+                kind = remaining.Count == 0 ? "success" : "warning",
+                message = remaining.Count == 0
+                    ? "MajdataPlay 已更新到最新版本"
+                    : $"还有 {remaining.Count:N0} 个文件需要继续更新"
+            });
+        }
+        catch (OperationCanceledException)
+        {
+            await SendAsync("operation", new { stage = "cancelled", message = "已取消游戏更新" });
+        }
+        catch (Exception ex)
+        {
+            await SendAsync("operation", new { stage = "error", message = ex.Message });
+            await SendAsync("toast", new
+            {
+                kind = "error",
+                message = "游戏更新中断：" + ex.Message
+            });
+        }
+        finally
+        {
+            EndOperation();
+        }
+    }
+
+    private void LaunchGame(JsonElement payload)
+    {
+        var root = CurrentGameRoot;
+        if (root is null)
+        {
+            _ = SendAsync("toast", new { kind = "warning", message = "请先设置游戏目录" });
+            return;
+        }
+
+        try
+        {
+            GameManager.LaunchGame(root, GetString(payload, "option"));
+            _ = SendAsync("toast", new { kind = "success", message = "游戏已启动" });
+        }
+        catch (Exception ex)
+        {
+            _ = SendAsync("toast", new { kind = "error", message = "启动失败：" + ex.Message });
+        }
+    }
+
+    private void OpenGameFolder()
+    {
+        var root = CurrentGameRoot;
+        if (root is not null && Directory.Exists(root))
+        {
+            Process.Start(new ProcessStartInfo("explorer.exe", $"\"{root}\"")
+            {
+                UseShellExecute = true
+            });
+        }
+    }
+
+    private async Task LoadSkinsAsync()
+    {
+        var root = CurrentGameRoot;
+        if (root is null)
+        {
+            await SendAsync("toast", new { kind = "warning", message = "请先选择游戏目录" });
+            return;
+        }
+
+        try
+        {
+            var skins = await GameManager.GetSkinsAsync(
+                root,
+                _settings.GameDownloadSource != "github",
+                null,
+                CancellationToken.None);
+            await SendAsync("skins", new { online = skins, installed = GameManager.GetInstalledSkins(root) });
+        }
+        catch (Exception ex)
+        {
+            await SendAsync("toast", new { kind = "error", message = "读取皮肤列表失败：" + ex.Message });
+        }
+    }
+
+    private async Task InstallSkinAsync(JsonElement payload)
+    {
+        var root = CurrentGameRoot;
+        if (root is null || _operationRunning)
+        {
+            return;
+        }
+
+        var request = payload.Deserialize<SkinInstallRequest>(JsonOptions.Default);
+        if (request is null || string.IsNullOrWhiteSpace(request.FileName))
+        {
+            return;
+        }
+
+        BeginOperation();
+        try
+        {
+            var status = new Progress<string>(message => _ = SendAsync("operation", new
+            {
+                stage = "import",
+                message,
+                indeterminate = true
+            }));
+            await _game.InstallSkinAsync(
+                root,
+                new SkinItem
+                {
+                    Name = request.Name ?? Path.GetFileNameWithoutExtension(request.FileName),
+                    FileName = request.FileName,
+                    Size = request.Size
+                },
+                _settings.GameDownloadSource != "github",
+                status,
+                _operation!.Token);
+            await SendAsync("operation", new { stage = "done", message = "皮肤安装完成" });
+            await LoadSkinsAsync();
+        }
+        catch (Exception ex)
+        {
+            await SendAsync("operation", new { stage = "error", message = ex.Message });
+            await SendAsync("toast", new { kind = "error", message = "皮肤安装失败：" + ex.Message });
+        }
+        finally
+        {
+            EndOperation();
+        }
+    }
+
+    private async Task LoadGameSettingsAsync()
+    {
+        var root = CurrentGameRoot;
+        if (root is null)
+        {
+            await SendAsync("toast", new { kind = "warning", message = "请先选择游戏目录" });
+            return;
+        }
+
+        try
+        {
+            await SendAsync("gameSettings", GameManager.LoadGameSettings(root));
+        }
+        catch (Exception ex)
+        {
+            await SendAsync("toast", new { kind = "warning", message = ex.Message });
+        }
+    }
+
+    private async Task ApplySkinAsync(JsonElement payload)
+    {
+        var root = CurrentGameRoot;
+        if (root is null)
+        {
+            await SendAsync("toast", new { kind = "warning", message = "请先选择游戏目录" });
+            return;
+        }
+
+        var request = payload.Deserialize<SkinApplyRequest>(JsonOptions.Default);
+        if (request is null || string.IsNullOrWhiteSpace(request.Name))
+        {
+            return;
+        }
+
+        try
+        {
+            var active = GameManager.ApplySkin(root, request.Name);
+            await SendAsync("toast", new { kind = "success", message = "已应用皮肤：" + active });
+            await SendGameStatusAsync();
+            await LoadGameSettingsAsync();
+            await LoadSkinsAsync();
+        }
+        catch (Exception ex)
+        {
+            await SendAsync("toast", new { kind = "error", message = "应用皮肤失败：" + ex.Message });
+        }
+    }
+
+    private async Task SaveGameSettingsAsync(JsonElement payload)
+    {
+        var root = CurrentGameRoot;
+        if (root is null)
+        {
+            return;
+        }
+
+        try
+        {
+            if (payload.TryGetProperty("settings", out var settings))
+            {
+                GameManager.SaveGameSettings(root, settings);
+                await SendAsync("toast", new { kind = "success", message = "游戏设置已保存" });
+                await LoadGameSettingsAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            await SendAsync("toast", new { kind = "error", message = "保存设置失败：" + ex.Message });
+        }
+    }
+
     private async Task MeasureNetworkInBackgroundAsync()
     {
         await SendAsync("networkTesting", new { message = "正在测试站点与 DNS 节点…" });
@@ -316,66 +866,73 @@ internal sealed class AppController : IDisposable
             return;
         }
 
-        var cachePath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "MajdataSync",
-            "catalog.json");
+        var cachePath = CatalogCachePath;
 
-        if (useCache && File.Exists(cachePath))
+        if (File.Exists(cachePath))
         {
             try
             {
-                var age = DateTimeOffset.Now - File.GetLastWriteTime(cachePath);
-                if (age < TimeSpan.FromMinutes(20))
+                var cached = JsonSerializer.Deserialize<List<ChartItem>>(
+                    await File.ReadAllTextAsync(cachePath),
+                    JsonOptions.Default);
+                if (cached is { Count: > 0 })
                 {
-                    var cached = JsonSerializer.Deserialize<List<ChartItem>>(
-                        await File.ReadAllTextAsync(cachePath),
-                        JsonOptions.Default);
-                    if (cached is { Count: > 0 })
+                    _charts = cached;
+                    _lastIndexAt = File.GetLastWriteTime(cachePath);
+                    await PublishCatalogAsync();
+                    if (useCache)
                     {
-                        _charts = cached;
-                        _lastIndexAt = File.GetLastWriteTime(cachePath);
-                        await PublishCatalogAsync();
+                        _ = RefreshCatalogInBackgroundAsync(cachePath, knownCount: cached.Count);
                         return;
                     }
                 }
             }
             catch
             {
-                // A corrupt cache is replaced by a live index.
+                // A corrupt cache is replaced by a complete index.
             }
         }
 
         BeginOperation();
         try
         {
-            var status = new Progress<string>(message => _ = SendAsync("operation", new
+            var status = new Progress<string>(message => _ = SendAsync("catalogBackground", new
             {
-                stage = "index",
-                message,
-                indeterminate = true
+                running = true,
+                message
             }));
             _charts = await _api.GetAllChartsAsync(status, _operation!.Token);
+            if (_charts.Count == 0)
+            {
+                throw new InvalidDataException(
+                    "没有读取到完整曲目索引" +
+                    (string.IsNullOrWhiteSpace(_api.LastIndexError) ? "" : "：" + _api.LastIndexError));
+            }
             _lastIndexAt = DateTimeOffset.Now;
             Directory.CreateDirectory(Path.GetDirectoryName(cachePath)!);
             await File.WriteAllTextAsync(
                 cachePath,
                 JsonSerializer.Serialize(_charts, JsonOptions.Compact),
                 _operation.Token);
+            CatalogCacheStore.Save(cachePath, _charts);
             await PublishCatalogAsync();
-            await SendAsync("operation", new
+            await SendAsync("catalogBackground", new
             {
-                stage = "done",
-                message = $"索引完成，共 {_charts.Count:N0} 首曲目，来源 {_api.LastIndexHost ?? _api.LastGoodMirror}"
+                running = false,
+                message = $"索引完成，共 {_charts.Count:N0} 首曲目"
             });
         }
         catch (OperationCanceledException)
         {
-            await SendAsync("operation", new { stage = "cancelled", message = "已停止" });
+            await SendAsync("catalogBackground", new { running = false, message = "索引已停止" });
         }
         catch (Exception ex)
         {
-            await SendAsync("operation", new { stage = "error", message = ex.Message });
+            await SendAsync("catalogBackground", new
+            {
+                running = false,
+                message = "读取索引失败：" + ex.Message
+            });
             await SendAsync("toast", new
             {
                 kind = "error",
@@ -385,6 +942,226 @@ internal sealed class AppController : IDisposable
         finally
         {
             EndOperation();
+        }
+    }
+
+    private async Task ReloadIndexInBackgroundAsync()
+    {
+        if (!EnsureReady() || _catalogRefreshRunning)
+        {
+            return;
+        }
+        _catalogRefreshRunning = true;
+        await SendAsync("catalogBackground", new
+        {
+            running = true,
+            message = "正在刷新曲目索引…"
+        });
+        try
+        {
+            var refreshed = await _api.GetAllChartsAsync(new Progress<string>(_ => { }), CancellationToken.None);
+            if (refreshed.Count == 0)
+            {
+                await SendAsync("catalogBackground", new
+                {
+                    running = false,
+                    message = string.IsNullOrWhiteSpace(_api.LastIndexError)
+                        ? "索引刷新未取得结果"
+                        : _api.LastIndexError
+                });
+                return;
+            }
+            _charts = refreshed;
+            _lastIndexAt = DateTimeOffset.Now;
+            await File.WriteAllTextAsync(
+                CatalogCachePath,
+                JsonSerializer.Serialize(_charts, JsonOptions.Compact));
+            CatalogCacheStore.Save(CatalogCachePath, _charts);
+            await PublishCatalogAsync();
+            await SendAsync("catalogUpdated", new { total = _charts.Count, indexedAt = _lastIndexAt });
+            await SendAsync("catalogBackground", new
+            {
+                running = false,
+                message = $"索引刷新完成 · {_charts.Count:N0} 首"
+            });
+            await SendAsync("toast", new
+            {
+                kind = "success",
+                message = $"索引已刷新，共 {_charts.Count:N0} 首曲目"
+            });
+        }
+        catch (Exception ex)
+        {
+            await SendAsync("catalogBackground", new
+            {
+                running = false,
+                message = "索引刷新失败：" + ex.Message
+            });
+            await SendAsync("toast", new { kind = "error", message = "读取索引失败：" + ex.Message });
+        }
+        finally
+        {
+            _catalogRefreshRunning = false;
+        }
+    }
+
+    private static string CatalogCachePath => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "MajdataSync",
+        "catalog.json");
+
+    private async Task<bool> LoadCachedCatalogAsync()
+    {
+        var cachePath = CatalogCachePath;
+        if (!File.Exists(cachePath))
+        {
+            await SendAsync("catalogLoading", new
+            {
+                message = "正在建立完整曲目索引…"
+            });
+            return false;
+        }
+
+        try
+        {
+            var cached = JsonSerializer.Deserialize<List<ChartItem>>(
+                await File.ReadAllTextAsync(cachePath),
+                JsonOptions.Default);
+            if (cached is not { Count: > 0 })
+            {
+                return false;
+            }
+
+            _charts = cached;
+            _lastIndexAt = File.GetLastWriteTime(cachePath);
+            await PublishCatalogAsync();
+            return true;
+        }
+        catch
+        {
+            await SendAsync("catalogLoading", new
+            {
+                message = "缓存无法读取，正在重新建立索引…"
+            });
+            return false;
+        }
+    }
+
+    private async Task InitializeCatalogInBackgroundAsync()
+    {
+        if (_catalogRefreshRunning)
+        {
+            return;
+        }
+
+        _catalogRefreshRunning = true;
+        try
+        {
+            if (_charts.Count > 0)
+            {
+                await RefreshCatalogInBackgroundAsync(CatalogCachePath, _charts.Count);
+                return;
+            }
+
+            await LoadIndexAsync(useCache: true);
+        }
+        finally
+        {
+            _catalogRefreshRunning = false;
+        }
+    }
+
+    private async Task ResetCatalogStateAsync()
+    {
+        _charts = [];
+        _catalogSummary = null;
+        _lastIndexAt = null;
+        await PublishCatalogAsync();
+    }
+
+    private async Task LoadCatalogAfterFolderChangeAsync()
+    {
+        if (_catalogRefreshRunning)
+        {
+            return;
+        }
+
+        _catalogRefreshRunning = true;
+        try
+        {
+            if (!await LoadCachedCatalogAsync())
+            {
+                await LoadIndexAsync(useCache: true);
+            }
+            else
+            {
+                _ = RefreshCatalogInBackgroundAsync(CatalogCachePath, _charts.Count);
+            }
+        }
+        finally
+        {
+            _catalogRefreshRunning = false;
+        }
+    }
+
+    private async Task RefreshCatalogInBackgroundAsync(string cachePath, int knownCount)
+    {
+        using var refreshCancellation = new CancellationTokenSource();
+        try
+        {
+            var refreshed = await _api.GetAllChartsAsync(
+                new Progress<string>(_ => { }),
+                refreshCancellation.Token);
+            if (refreshed.Count == 0)
+            {
+                return;
+            }
+
+            var previous = CatalogCacheStore.Load(cachePath);
+            var changed = refreshed.Any(chart =>
+                !previous.Charts.TryGetValue(chart.Id, out var hash) ||
+                !string.Equals(hash, chart.Hash, StringComparison.Ordinal));
+            var countChanged = refreshed.Count != knownCount;
+            if (!changed && !countChanged)
+            {
+                _lastIndexAt = DateTimeOffset.Now;
+                await SendAsync("catalogBackground", new
+                {
+                    running = false,
+                    message = "索引已是最新"
+                });
+                return;
+            }
+
+            await SendAsync("catalogBackground", new
+            {
+                running = true,
+                message = $"正在后台校验索引 · 当前可用 {knownCount:N0} 首"
+            });
+
+            _charts = refreshed;
+            _lastIndexAt = DateTimeOffset.Now;
+            await File.WriteAllTextAsync(
+                cachePath,
+                JsonSerializer.Serialize(_charts, JsonOptions.Compact),
+                refreshCancellation.Token);
+            CatalogCacheStore.Save(cachePath, _charts);
+            await PublishCatalogAsync();
+            await SendAsync("catalogUpdated", new { total = _charts.Count, indexedAt = _lastIndexAt });
+            await SendAsync("catalogBackground", new
+            {
+                running = false,
+                message = $"后台索引已更新 · {_charts.Count:N0} 首"
+            });
+        }
+        catch
+        {
+            // The cached catalog remains usable if a refresh fails.
+            await SendAsync("catalogBackground", new
+            {
+                running = false,
+                message = "后台索引校验未完成，继续使用本地缓存"
+            });
         }
     }
 
@@ -980,6 +1757,13 @@ internal sealed class AppController : IDisposable
             return;
         }
 
+        if (_charts.Count == 0)
+        {
+            await SendAsync("catalogLoading", new { message = "正在准备曲目索引…" });
+            _ = LoadCatalogAfterFolderChangeAsync();
+            return;
+        }
+
         var query = payload.Deserialize<CatalogQuery>(JsonOptions.Default) ?? new CatalogQuery();
         var pageSize = Math.Clamp(query.PageSize, 12, 48);
         var inventory = _inventory ?? await new InventoryStore(_folder.RootPath)
@@ -1178,7 +1962,7 @@ internal sealed class AppController : IDisposable
         return SendAsync("state", new AppStatus
         {
             OperationRunning = _operationRunning,
-            Version = "1.1.0",
+            Version = "1.7.1",
             Site = ChartApi.SiteUrl
         });
     }

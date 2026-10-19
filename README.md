@@ -8,6 +8,7 @@ Majdata Sync 是一个 Windows 桌面工具，用于从 [majdata.net](https://ma
 
 - 自动寻找 MajdataPlay 的 `MaiCharts\Original`，支持选择游戏根目录或 Original 文件夹，不绑定盘符。
 - 全量索引站点曲目，按上传日期查询；通过曲目 ID 与站点哈希增量同步新谱面和新版谱面。
+- 索引使用站点 `limit=99999` 完整列表接口，并在本地保存曲目快照；启动时先秒开缓存，再在后台刷新。
 - 每首曲目并行下载曲目、封面、谱面与可选 PV，默认 6 个并行任务，可在 1-12 之间调整。
 - 直接生成 `Original\曲名\`，文件位于曲目根目录，不保留 ZIP。
 - 导入已有 ZIP 时，以 ZIP 文件名建立曲目文件夹，并自动展开单层同名目录。
@@ -16,6 +17,10 @@ Majdata Sync 是一个 Windows 桌面工具，用于从 [majdata.net](https://ma
 - 可优先使用用户提供的同源加速镜像 `maj-3.moyingmoe.top`，不可用时依次回退 `maj-2`、`maj-1` 与主站；设置中可关闭镜像。
 - 可选择仅写本地曲目库、仅写 MajdataPlay 在线缓存，或两者同时写入。
 - 支持把现有本地曲目批量预热到 `Cache\Net\MajdataNET`，并按游戏规则生成 `.sha256`。
+- 集成游戏管理：从 CNB 或 GitHub 下载并安装 MajdataPlay，检查文件更新并按需启动。
+- 支持选择 D3D11、D3D12、OpenGL、Vulkan、测试模式或谱面编辑模式启动。
+- 从 CNB 或 GitHub 读取社区皮肤列表，下载、重装并直接应用 `Display.Skin`。
+- 内置常用游戏设置编辑器；高级设置会列出未展示字段，并提供中文说明、有效值与搜索。
 
 ## 运行
 
@@ -42,10 +47,12 @@ Original
 
 - 站点接口与页面资源来自 `https://majdata.net`。网络不可用、Cloudflare 限流或站点改版时，程序会显示具体错误，不会误删现有曲目。
 - 加速镜像通过相同曲目 ID 和 `/api3/api/maichart/...` 接口读取数据；程序逐曲目校验必要文件，镜像失败时回退主站。
+- 游戏下载源默认选择 CNB。当前实测 CNB 构建包明显快于 GitHub，仍可在游戏管理页手动切换。
 - 下载采用临时目录写入，只有必需文件齐全后才移动到 `Original`，避免产生半成品曲目。
 - 下载与 ZIP 导入使用 `Original` 同盘的隐藏工作目录 `.majdata-work`，因此跨盘安装无需搬运巨型临时文件；成功提交后自动清理对应缓存。
-- 全量索引没有站点总数接口，程序读取到连续空页后停止；索引缓存位于 `%LOCALAPPDATA%\MajdataSync\catalog.json`。
+- 索引缓存位于 `%LOCALAPPDATA%\MajdataSync\catalog.json`，完整接口不可用时会自动回退到分页查找。
 - ZIP 导入要求包内包含 `maidata.txt`。
+- 应用皮肤只会更新 `settings.json` 的 `Display.Skin`；高级设置只写入修改后的高级字段。
 - 运行日志位于 `%LOCALAPPDATA%\MajdataSync\logs`，设置页可直接打开。
 
 ## 从源码构建

@@ -36,15 +36,23 @@ public partial class MainWindow : Window
             var dataFolder = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                 "MajdataSync");
+            var webViewDataFolder = Environment.GetEnvironmentVariable("MAJDATA_SYNC_DEVTOOLS") == "1"
+                ? Path.Combine(Path.GetTempPath(), "MajdataSync", "WebView2Test")
+                : Path.Combine(dataFolder, "WebView2");
             Directory.CreateDirectory(dataFolder);
 
             var environment = await CoreWebView2Environment.CreateAsync(
                 browserExecutableFolder: null,
-                userDataFolder: Path.Combine(dataFolder, "WebView2"));
+                userDataFolder: webViewDataFolder,
+                options: new CoreWebView2EnvironmentOptions(
+                    additionalBrowserArguments: Environment.GetEnvironmentVariable("MAJDATA_SYNC_DEVTOOLS") == "1"
+                        ? "--remote-debugging-port=9223"
+                        : null));
 
             await WebView.EnsureCoreWebView2Async(environment);
             WebView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;
-            WebView.CoreWebView2.Settings.AreDevToolsEnabled = false;
+            var devTools = Environment.GetEnvironmentVariable("MAJDATA_SYNC_DEVTOOLS") == "1";
+            WebView.CoreWebView2.Settings.AreDevToolsEnabled = devTools;
             WebView.CoreWebView2.Settings.IsStatusBarEnabled = false;
             WebView.CoreWebView2.WebMessageReceived += OnWebMessageReceived;
             WebView.CoreWebView2.NavigationStarting += OnNavigationStarting;

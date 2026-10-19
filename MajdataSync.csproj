@@ -3,7 +3,7 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
     <UseWPF>true</UseWPF>
-    <DefaultItemExcludes>$(DefaultItemExcludes);live-test*/**</DefaultItemExcludes>
+    <DefaultItemExcludes>$(DefaultItemExcludes);live-test*/**;majdata-settings-source/**;majdata-raw-source/**;majdata-extra-source/**</DefaultItemExcludes>
     <UseWindowsForms>false</UseWindowsForms>
     <Nullable>enable</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>
@@ -11,8 +11,8 @@
     <RootNamespace>MajdataSync</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
-    <Version>1.1.0</Version>
-    <FileVersion>1.1.0.0</FileVersion>
+    <Version>1.7.1</Version>
+    <FileVersion>1.7.1.0</FileVersion>
     <Product>Majdata Sync</Product>
     <Company>Majdata Sync</Company>
     <RepositoryUrl>https://github.com/Zppppp124/MajdataSync</RepositoryUrl>

@@ -5,6 +5,10 @@ using System.IO.Compression;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
+using System.Net;
+using System.Net.Http;
+using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
 using MajdataSync;
@@ -80,13 +84,94 @@ internal static class Program
 
             Assert(FolderDetector.SafeFolderName("CON") == "CON_", "Windows reserved folder name should be escaped");
 
+            var localGameRoot = Path.Combine(testRoot, "MajdataPlay");
+            Directory.CreateDirectory(localGameRoot);
+            File.WriteAllBytes(Path.Combine(localGameRoot, "MajdataPlay.exe"), [0]);
+            File.WriteAllText(
+                Path.Combine(localGameRoot, "settings.json"),
+                "{\"Game\":{\"TapSpeed\":7.5},\"Display\":{\"Skin\":\"default\"},\"Online\":{\"Enable\":true}}");
+            Directory.CreateDirectory(Path.Combine(localGameRoot, "Skins", "Test Skin"));
+            var activeSkin = GameManager.ApplySkin(localGameRoot, "Test Skin");
+            var activeSettings = GameManager.LoadGameSettings(localGameRoot);
+            Assert(activeSkin == "Test Skin", "GameManager should apply the selected skin");
+            Assert(activeSettings.GetProperty("Display").GetProperty("Skin").GetString() == "Test Skin",
+                "Applying a skin should update Display.Skin");
+            Assert(activeSettings.GetProperty("Game").GetProperty("TapSpeed").GetDouble() == 7.5,
+                "Applying a skin should preserve unrelated settings");
+            Assert(GameManager.GetInstalledSkins(localGameRoot).Single(item => item.Name == "Test Skin").Active,
+                "Active skin should be identified in the installed list");
+            var endpointSettings = JsonSerializer.Deserialize<System.Text.Json.Nodes.JsonObject>(
+                activeSettings.GetRawText())!;
+            var endpoints = new System.Text.Json.Nodes.JsonArray
+            {
+                new System.Text.Json.Nodes.JsonObject
+                {
+                    ["Name"] = "MajdataNET",
+                    ["Url"] = "https://maj-1.moyingmoe.top/api3/api/",
+                    ["Username"] = "keep-me",
+                    ["Password"] = "keep-secret",
+                    ["AutoLogin"] = true
+                }
+            };
+            ((System.Text.Json.Nodes.JsonObject)endpointSettings["Online"]!)["ApiEndpoints"] = endpoints;
+            GameManager.SaveGameSettings(
+                localGameRoot,
+                JsonSerializer.SerializeToElement(endpointSettings));
+            var savedEndpoints = GameManager.LoadGameSettings(localGameRoot)
+                .GetProperty("Online").GetProperty("ApiEndpoints")[0];
+            Assert(savedEndpoints.GetProperty("Url").GetString() == "https://maj-1.moyingmoe.top/api3/api/",
+                "Online endpoint should save the selected source");
+            Assert(savedEndpoints.GetProperty("Username").GetString() == "keep-me",
+                "Changing the endpoint should preserve login fields");
+
+            if (args.Length == 1 &&
+                !args[0].StartsWith("gamestatus:", StringComparison.OrdinalIgnoreCase) &&
+                !args[0].StartsWith("catalogbench:", StringComparison.OrdinalIgnoreCase) &&
+                !args[0].StartsWith("resume:", StringComparison.OrdinalIgnoreCase))
+            {
+                if (args[0].StartsWith("installgame:", StringComparison.OrdinalIgnoreCase))
+                {
+                    var installTarget = Path.GetFullPath(args[0]["installgame:".Length..]);
+                    using var installApi = new ChartApi();
+                    var installManager = new GameManager(installApi);
+                    var reports = 0;
+                    await installManager.InstallGameAsync(
+                        installTarget,
+                        useCnb: true,
+                        new Progress<(string Message, double? Progress)>(value =>
+                        {
+                            reports++;
+                            if (reports <= 3 || reports % 20 == 0 || value.Progress is >= 1)
+                            {
+                                Console.WriteLine($"{value.Message} progress={value.Progress}");
+                            }
+                        }),
+                        CancellationToken.None);
+                    Assert(GameManager.IsInstalled(installTarget), "Installed game should contain MajdataPlay.exe");
+                    Assert(reports > 5, "Game install should report download progress");
+                    Console.WriteLine($"PASS: game install and progress ({reports} reports)");
+                    return 0;
+                }
+
+                var statusRoot = Path.GetFullPath(args[0]);
+                Assert(GameManager.IsInstalled(statusRoot), "Game status check requires an installed game");
+                using var statusApi = new ChartApi();
+                var statusManager = new GameManager(statusApi);
+                var status = await statusManager.CheckGameUpdateAsync(
+                    statusRoot,
+                    useCnb: true,
+                    CancellationToken.None);
+                Console.WriteLine($"GAMESTATUS: installed=True changed={status.Files.Count} manifest={status.ManifestUrl}");
+            }
+
             if (args.Length == 2 &&
                 !args[0].StartsWith("download:", StringComparison.OrdinalIgnoreCase) &&
                 !args[0].StartsWith("catalog:", StringComparison.OrdinalIgnoreCase) &&
                 !args[0].StartsWith("network:", StringComparison.OrdinalIgnoreCase) &&
                 !args[0].StartsWith("speed:", StringComparison.OrdinalIgnoreCase) &&
                 !args[0].StartsWith("routes:", StringComparison.OrdinalIgnoreCase) &&
-                !args[0].StartsWith("cache:", StringComparison.OrdinalIgnoreCase))
+                !args[0].StartsWith("cache:", StringComparison.OrdinalIgnoreCase) &&
+                !args[0].StartsWith("gamedata:", StringComparison.OrdinalIgnoreCase))
             {
                 var sampleRoot = FolderDetector.DetectFrom(args[0]);
                 Assert(sampleRoot is not null, "Sample root should be detected as a Majdata folder");
@@ -151,6 +236,35 @@ internal static class Program
                 Assert(pageCount > 1, "Live catalog should require pagination");
                 Console.WriteLine($"PASS: live catalog index has {count} charts across {pageCount} pages");
                 controller.Dispose();
+            }
+
+            if (args.Length == 1 && args[0].StartsWith("catalogbench:", StringComparison.OrdinalIgnoreCase))
+            {
+                var cachePath = args[0]["catalogbench:".Length..];
+                var cacheWatch = System.Diagnostics.Stopwatch.StartNew();
+                var cached = JsonSerializer.Deserialize<List<ChartItem>>(
+                    await File.ReadAllTextAsync(cachePath),
+                    JsonOptions.Default) ?? [];
+                cacheWatch.Stop();
+                using var liveApi = new ChartApi();
+                var liveWatch = System.Diagnostics.Stopwatch.StartNew();
+                var live = await liveApi.GetAllChartsAsync(null, CancellationToken.None);
+                liveWatch.Stop();
+                Assert(cached.Count > 1000, "Catalog cache should contain the full chart list");
+                Assert(live.Count >= cached.Count, "Bulk API should return the complete chart list");
+                Console.WriteLine(
+                    $"PASS: cache={cached.Count} in {cacheWatch.ElapsedMilliseconds}ms; " +
+                    $"bulk={live.Count} in {liveWatch.ElapsedMilliseconds}ms");
+                return 0;
+            }
+
+            if (args.Length == 1 && args[0].StartsWith("resume:", StringComparison.OrdinalIgnoreCase))
+            {
+                var root = Path.GetFullPath(args[0]["resume:".Length..]);
+                Directory.CreateDirectory(root);
+                await TestResumeDownloadAsync(root, cancellationToken: CancellationToken.None);
+                Console.WriteLine("PASS: interrupted download resumed from existing .part bytes");
+                return 0;
             }
 
             if (args.Length == 2 && args[0].StartsWith("network:", StringComparison.OrdinalIgnoreCase))
@@ -263,7 +377,37 @@ internal static class Program
                 Console.WriteLine("PASS: MajdataPlay online cache layout and Base64 SHA-256");
             }
 
-                Console.WriteLine("PASS: directory detection, cross-volume import, and traversal protection");
+            if (args.Length == 2 && args[0].StartsWith("gamedata:", StringComparison.OrdinalIgnoreCase))
+            {
+                var gameRoot = Path.Combine(args[0]["gamedata:".Length..], "MajdataPlay");
+                Directory.CreateDirectory(gameRoot);
+                File.WriteAllBytes(Path.Combine(gameRoot, "MajdataPlay.exe"), [0]);
+                File.WriteAllText(
+                    Path.Combine(gameRoot, "settings.json"),
+                    "{\"Game\":{\"TapSpeed\":7.5},\"Online\":{\"Enable\":true}}");
+                Assert(GameManager.IsInstalled(gameRoot), "GameManager should detect MajdataPlay.exe");
+                var settings = GameManager.LoadGameSettings(gameRoot);
+                Assert(settings.GetProperty("Game").GetProperty("TapSpeed").GetDouble() == 7.5,
+                    "Game settings should load");
+                var skinsRoot = Path.Combine(gameRoot, "Skins");
+                Directory.CreateDirectory(Path.Combine(skinsRoot, "Test Skin"));
+                var applied = GameManager.ApplySkin(gameRoot, "Test Skin");
+                Assert(applied == "Test Skin", "ApplySkin should return the active skin name");
+                var appliedSettings = GameManager.LoadGameSettings(gameRoot);
+                Assert(appliedSettings.GetProperty("Display").GetProperty("Skin").GetString() == "Test Skin",
+                    "ApplySkin should update Display.Skin");
+                Assert(appliedSettings.GetProperty("Game").GetProperty("TapSpeed").GetDouble() == 7.5 &&
+                       appliedSettings.GetProperty("Online").GetProperty("Enable").GetBoolean(),
+                    "ApplySkin should preserve unrelated settings");
+                Assert(GameManager.GetInstalledSkins(gameRoot).Single().Active,
+                    "Installed skin should be marked active");
+                using var gameApi = new ChartApi();
+                var skins = await GameManager.GetSkinsAsync(gameRoot, true, null, CancellationToken.None);
+                Assert(skins.Count > 0, "CNB skin list should return entries");
+                Console.WriteLine($"PASS: game manager, settings, active skin, and {skins.Count} online skins");
+            }
+
+                Console.WriteLine("PASS: directory detection, cross-volume import, traversal protection, and skin settings");
             return 0;
         }
         catch (Exception ex)
@@ -293,6 +437,107 @@ internal static class Program
         using var stream = entry.Open();
         var bytes = Encoding.UTF8.GetBytes(content);
         stream.Write(bytes);
+    }
+
+    private static async Task TestResumeDownloadAsync(string root, CancellationToken cancellationToken)
+    {
+        var payload = Encoding.UTF8.GetBytes(string.Concat(Enumerable.Repeat(
+            "MajdataSync resume payload ", 65536)));
+        using var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+        var requestCount = 0;
+        using var serverCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var server = Task.Run(async () =>
+        {
+            for (var index = 0; index < 2; index++)
+            {
+                using var client = await listener.AcceptTcpClientAsync(serverCancellation.Token);
+                using var stream = client.GetStream();
+                var buffer = new byte[8192];
+                var read = await stream.ReadAsync(buffer, cancellationToken);
+                var request = Encoding.ASCII.GetString(buffer, 0, read);
+                var rangeHeader = request
+                    .Split("\r\n", StringSplitOptions.RemoveEmptyEntries)
+                    .FirstOrDefault(line => line.StartsWith("Range:", StringComparison.OrdinalIgnoreCase));
+                var start = 0;
+                if (rangeHeader is not null)
+                {
+                    var value = rangeHeader.Split('=')[1].Split('-')[0];
+                    int.TryParse(value, out start);
+                }
+                var body = payload.AsMemory(start);
+                var status = start > 0 ? "206 Partial Content" : "200 OK";
+                var sendLength = index == 0 ? body.Length / 2 : body.Length;
+                if (index == 0)
+                {
+                    sendLength = payload.Length / 2;
+                }
+                else
+                {
+                    sendLength = Math.Max(0, payload.Length - start);
+                }
+                var header = $"HTTP/1.1 {status}\r\nContent-Length: {sendLength}\r\n" +
+                              (start > 0
+                                  ? $"Content-Range: bytes {start}-{payload.Length - 1}/{payload.Length}\r\n"
+                                  : "") +
+                              "Connection: close\r\n\r\n";
+                await stream.WriteAsync(Encoding.ASCII.GetBytes(header), cancellationToken);
+                await stream.WriteAsync(body.Slice(0, sendLength), cancellationToken);
+                await stream.FlushAsync(cancellationToken);
+                Interlocked.Increment(ref requestCount);
+                if (index == 0)
+                {
+                    client.Close();
+                }
+            }
+        }, cancellationToken);
+
+        var destination = Path.Combine(root, "resume.bin");
+        var part = destination + ".part";
+        if (File.Exists(destination)) File.Delete(destination);
+        if (File.Exists(part)) File.Delete(part);
+        await using (var initial = File.Create(part))
+        {
+            await initial.WriteAsync(payload.AsMemory(0, payload.Length / 2), cancellationToken);
+        }
+
+        using var http = new HttpClient
+        {
+            Timeout = TimeSpan.FromSeconds(5)
+        };
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"http://127.0.0.1:{port}/resume.bin");
+        request.Headers.Range = new System.Net.Http.Headers.RangeHeaderValue(payload.Length / 2, null);
+        using var response = await http.SendAsync(
+            request,
+            HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken);
+        Assert(response.StatusCode == HttpStatusCode.PartialContent,
+            "Range server should return partial content");
+        await using (var source = await response.Content.ReadAsStreamAsync(cancellationToken))
+        await using (var output = new FileStream(part, FileMode.Append, FileAccess.Write))
+        {
+            await source.CopyToAsync(output, cancellationToken);
+        }
+        File.Move(part, destination, overwrite: true);
+        serverCancellation.Cancel();
+        listener.Stop();
+        try
+        {
+            await server;
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+        catch (SocketException)
+        {
+        }
+        Assert(File.ReadAllBytes(destination).SequenceEqual(payload),
+            "Resumed file should match the original payload");
+        Assert(requestCount == 1, "Resume request should reach the server once");
     }
 
     private static void Assert(bool condition, string message)

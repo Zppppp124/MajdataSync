@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json.Serialization;
+using System.Text.Json;
 
 namespace MajdataSync;
 
@@ -53,6 +54,8 @@ internal sealed class AppSettings
     public string DownloadMode { get; set; } = "auto";
     public bool UseMirrors { get; set; } = true;
     public string StorageTarget { get; set; } = "both";
+    public string GameDownloadSource { get; set; } = "cnb";
+    public string? GameRootPath { get; set; }
 }
 
 internal sealed class SyncRecord
@@ -123,4 +126,40 @@ internal sealed class CatalogQuery
     public string Status { get; set; } = "all";
     public string? DateFrom { get; set; }
     public string? DateTo { get; set; }
+}
+
+internal sealed class CatalogSnapshot
+{
+    public Dictionary<string, string> Charts { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public DateTimeOffset UpdatedAt { get; set; }
+}
+
+internal sealed class GameInstallRequest
+{
+    public string? Source { get; set; }
+    public string? TargetPath { get; set; }
+}
+
+internal sealed class GameLaunchRequest
+{
+    public string? Option { get; set; }
+}
+
+internal sealed class GameSettingUpdate
+{
+    public string? Section { get; set; }
+    public string? Key { get; set; }
+    public JsonElement Value { get; set; }
+}
+
+internal sealed class SkinInstallRequest
+{
+    public string? Name { get; set; }
+    public string? FileName { get; set; }
+    public long Size { get; set; }
+}
+
+internal sealed class SkinApplyRequest
+{
+    public string? Name { get; set; }
 }
