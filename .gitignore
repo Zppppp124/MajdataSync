@@ -12,6 +12,8 @@ mirror-*/
 network-test*/
 route-download-test/
 speed-test*/
+cache-layout-*/
+WindowHelper.ps1
 *test*/
 _site-index.js
 _*.cs
