@@ -1,8 +1,18 @@
 # Majdata Sync
 
 [![build](https://github.com/Zppppp124/MajdataSync/actions/workflows/build.yml/badge.svg)](https://github.com/Zppppp124/MajdataSync/actions/workflows/build.yml)
+[![release](https://img.shields.io/github/v/release/Zppppp124/MajdataSync?label=release)](https://github.com/Zppppp124/MajdataSync/releases/latest)
+[![download](https://img.shields.io/github/downloads/Zppppp124/MajdataSync/total?label=downloads)](https://github.com/Zppppp124/MajdataSync/releases/latest)
 
 Majdata Sync 是一个 Windows 桌面工具，用于从 [majdata.net](https://majdata.net) 下载 MajdataPlay 谱面，并整理为游戏可直接读取的目录结构。
+
+## 下载
+
+当前版本：**v1.7.1**
+
+[下载 Windows x64 自包含版本](https://github.com/Zppppp124/MajdataSync/releases/download/v1.7.1/MajdataSync-win-x64-v1.7.1.zip)
+
+Windows 10/11 可直接运行，无需单独安装 .NET。程序界面使用 WebView2，大多数 Windows 10/11 已预装该运行时。
 
 ## 功能
 

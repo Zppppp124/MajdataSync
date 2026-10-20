@@ -19,11 +19,31 @@ jobs:
       - name: Publish
         run: powershell -NoProfile -ExecutionPolicy Bypass -File .\build-release.ps1
       - name: Archive
-        run: Compress-Archive -Path .\publish\* -DestinationPath .\MajdataSync-win-x64.zip
+        shell: pwsh
+        run: |
+          $version = ([xml](Get-Content -LiteralPath .\MajdataSync.csproj)).Project.PropertyGroup.Version
+          Compress-Archive -Path .\publish\* -DestinationPath ".\MajdataSync-win-x64-v$version.zip"
+          Write-Output "RELEASE_ASSET=MajdataSync-win-x64-v$version.zip" >> $env:GITHUB_ENV
       - name: Upload release asset
         uses: softprops/action-gh-release@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          files: MajdataSync-win-x64.zip
+          name: Majdata Sync v1.7.1
+          body: |
+            ## Majdata Sync v1.7.1
+
+            本次发布包含完整的 Windows x64 自包含版本，无需单独安装 .NET。
+
+            ### 主要更新
+
+            - 曲库索引改为完整接口加载，并支持本地缓存秒开与后台刷新
+            - 后台校验索引不再锁定界面，也不显示右下角操作条
+            - 游戏管理支持 CNB / GitHub 下载源、启动与断点续传更新
+            - 支持在线皮肤下载、应用与游戏内置设置编辑
+            - 高级设置提供中文说明、有效值、默认值、分组和搜索
+            - 优化下载速度、镜像优选与网络失败自动回退
+          files: ${{ env.RELEASE_ASSET }}
+          fail_on_unmatched_files: true
+          overwrite_files: true
           generate_release_notes: true
