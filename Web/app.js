@@ -308,6 +308,13 @@
     $('#gameChannelHint').textContent = channel === 'prerelease'
       ? '测试版从 MajdataPlay 的 nightly 包更新，下载会自动续传到完成。'
       : '稳定版固定从 MajdataPlay_Build 获取，下载会自动续传到完成。';
+    const route = ['fast', 'proxy', 'mirror', 'auto'].includes(payload.downloadRoute)
+      ? payload.downloadRoute
+      : 'fast';
+    $('#gameRoute').value = route;
+    $('#gameRouteHint').textContent = route === 'auto'
+      ? '下载前自动测速；选择延迟与实际吞吐表现更好的线路。'
+      : `优先使用 ${route === 'fast' ? 'Fast' : route === 'proxy' ? 'Proxy' : 'Mirror'}；持续无进度时自动回退。`;
     if (installed && channel === 'stable') {
       state.gameUpdates = 0;
       $('#gameUpdateText').textContent = '检查游戏文件是否与最新稳定构建一致';
@@ -333,6 +340,7 @@
         : '下载后自动解压到所选游戏目录';
     $('#launchGame').disabled = !installed;
     $('#gameChannel').disabled = noGameFolder || !installed;
+    $('#gameRoute').disabled = noGameFolder;
     $('#checkGameUpdate').disabled = !installed;
     $('#saveGameSettings').disabled = !installed;
     $('#loadAdvancedSettings').disabled = !installed;
@@ -1178,6 +1186,18 @@
       if (!confirm('将下载完整 MajdataPlay 游戏包并解压到游戏目录，继续吗？')) return;
       post('installGame', { channel: $('#gameChannel').value });
       switchView('tasks');
+    });
+    $('#gameRoute').addEventListener('change', () => {
+      const route = $('#gameRoute').value;
+      post('saveGameSource', { route });
+      const label = route === 'fast' ? 'Fast'
+        : route === 'proxy' ? 'Proxy'
+        : route === 'mirror' ? 'Mirror'
+        : '自动测速';
+      $('#gameRouteHint').textContent = route === 'auto'
+        ? '下载前自动测速；选择延迟与实际吞吐表现更好的线路。'
+        : `优先使用 ${label}；持续无进度时自动回退。`;
+      showToast(`游戏下载线路已切换为 ${label}`, 'success');
     });
     $('#gameChannel').addEventListener('change', () => {
       const channel = $('#gameChannel').value;

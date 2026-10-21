@@ -53,7 +53,7 @@
 
       <div class="sidebar-foot">
         <a href="#" id="siteLink" class="site-link">majdata.net <span data-icon="arrow-up-right"></span></a>
-        <span>本地同步工具 · v1.9.1</span>
+        <span>本地同步工具 · v1.9.2</span>
       </div>
     </aside>
 
@@ -314,6 +314,18 @@
               <select class="select-control" id="gameChannel" disabled>
                 <option value="stable">稳定版</option>
                 <option value="prerelease">测试版 nightly</option>
+              </select>
+            </div>
+            <div class="setting-row">
+              <div>
+                <strong>下载线路</strong>
+                <span id="gameRouteHint">默认优先 Fast；当前线路持续无进度时会自动回退。</span>
+              </div>
+              <select class="select-control" id="gameRoute">
+                <option value="fast">Fast（默认）</option>
+                <option value="proxy">Proxy</option>
+                <option value="mirror">Mirror</option>
+                <option value="auto">自动测速</option>
               </select>
             </div>
             <div class="setting-row">

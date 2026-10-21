@@ -22,9 +22,9 @@
 
 ## 下载
 
-当前版本：**v1.9.1**
+当前版本：**v1.9.2**
 
-[**下载 Windows x64 自包含版本**](https://github.com/Zppppp124/MajdataSync/releases/download/v1.9.1/MajdataSync-win-x64-v1.9.1.zip) · [离线 HTML 使用说明书](docs/MajdataSync-Manual.html) · [查看全部版本](https://github.com/Zppppp124/MajdataSync/releases)
+[**下载 Windows x64 自包含版本**](https://github.com/Zppppp124/MajdataSync/releases/download/v1.9.2/MajdataSync-win-x64-v1.9.2.zip) · [离线 HTML 使用说明书](docs/MajdataSync-Manual.html) · [查看全部版本](https://github.com/Zppppp124/MajdataSync/releases)
 
 Windows 10/11 可直接运行，无需单独安装 .NET。程序界面使用 WebView2，大多数 Windows 10/11 已预装该运行时。
 
@@ -75,7 +75,8 @@ Windows 10/11 可直接运行，无需单独安装 .NET。程序界面使用 Web
 ![下载线路锁定与回退](docs/assets/feature-network.svg)
 
 - 大型游戏包会测试 `ghfast.top`、`gh-proxy.com`、`ghproxy.net` 与 GitHub 直连。
-- 测速后锁定一个能稳定传输的线路，所有分片都走该线路，不再每个分片轮换镜像。
+- 游戏管理可选择 `Fast`（默认）、`Proxy`、`Mirror` 或自动测速；默认优先 Fast。
+- 选中线路后锁定使用该线路，所有分片都走同一线路，不再每个分片轮换镜像。
 - 当前线路短暂中断时，会等待并利用已有分片继续下载；下载任务没有总重试轮数上限。
 - 只有当前线路持续无进度，才切换到其它线路；切换时保留已完成分片并继续续传。
 - 游戏包下载或应用更新会一直运行，直到包完整、长度校验成功并安全替换为止。只有你主动停止、关闭程序，或遇到磁盘空间/文件权限等无法恢复的错误才会结束。

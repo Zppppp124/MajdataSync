@@ -55,6 +55,7 @@ internal sealed class AppSettings
     public bool UseMirrors { get; set; } = true;
     public string StorageTarget { get; set; } = "both";
     public string GameDownloadSource { get; set; } = "github";
+    public string GameDownloadRoute { get; set; } = "fast";
     public string GameChannel { get; set; } = "stable";
     public string? GameRootPath { get; set; }
 }

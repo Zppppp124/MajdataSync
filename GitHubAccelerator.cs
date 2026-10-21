@@ -22,27 +22,65 @@ internal sealed class GitHubAcceleratedDownloader
         "https://ghproxy.net/"
     ];
 
+    public static IReadOnlyList<(string Key, string Label, string Url)> Routes(string url) =>
+    [
+        ("fast", "Fast 加速", "https://ghfast.top/" + url),
+        ("proxy", "Proxy 加速", "https://gh-proxy.com/" + url),
+        ("mirror", "Mirror 加速", "https://ghproxy.net/" + url),
+        ("direct", "直连 GitHub", url)
+    ];
+
     public static IReadOnlyList<string> CandidateUrls(string url) =>
         Mirrors
             .Select(mirror => mirror + url)
             .Append(url)
             .ToArray();
 
-    private static IReadOnlyList<string> DownloadCandidates(string url) =>
-        url.StartsWith("http://127.0.0.1", StringComparison.OrdinalIgnoreCase) ||
-        url.StartsWith("http://localhost", StringComparison.OrdinalIgnoreCase)
-            ? [url]
-            : CandidateUrls(url);
+    public static IReadOnlyList<string> DownloadCandidates(
+        string url,
+        string routePreference = "fast")
+    {
+        if (url.StartsWith("http://127.0.0.1", StringComparison.OrdinalIgnoreCase) ||
+            url.StartsWith("http://localhost", StringComparison.OrdinalIgnoreCase))
+        {
+            return [url];
+        }
+
+        var routes = Routes(url);
+        if (routePreference.Equals("auto", StringComparison.OrdinalIgnoreCase))
+        {
+            return CandidateUrls(url);
+        }
+
+        var routeArray = routes.ToArray();
+        var selectedIndex = Array.FindIndex(
+            routeArray,
+            route => route.Key.Equals(routePreference, StringComparison.OrdinalIgnoreCase));
+        if (selectedIndex < 0)
+        {
+            selectedIndex = 0;
+        }
+        return routeArray
+            .Skip(selectedIndex)
+            .Concat(routeArray.Take(selectedIndex))
+            .Select(route => route.Url)
+            .ToArray();
+    }
 
     public async Task DownloadAsync(
         string url,
         string destination,
         IProgress<(string Source, long Bytes, long? Total, double Speed)>? progress,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string routePreference = "fast")
     {
         Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
-        var preferred = await SelectRouteAsync(url, cancellationToken, destination);
-        var routes = DownloadCandidates(url)
+        var preferred = await SelectRouteAsync(
+            url,
+            cancellationToken,
+            destination,
+            routePreference);
+        var routes = DownloadCandidates(url, routePreference)
             .OrderByDescending(candidate =>
                 candidate.Equals(preferred.Url, StringComparison.OrdinalIgnoreCase))
             .Select(candidate => (
@@ -96,7 +134,8 @@ internal sealed class GitHubAcceleratedDownloader
     public async Task<(string Label, string Url)> SelectRouteAsync(
         string url,
         CancellationToken cancellationToken,
-        string? destination = null)
+        string? destination = null,
+        string routePreference = "fast")
     {
         if (destination is not null &&
             TryReadRouteMarker(destination, out var markerRoute))
@@ -124,6 +163,21 @@ internal sealed class GitHubAcceleratedDownloader
 
         }
 
+        if (!routePreference.Equals("auto", StringComparison.OrdinalIgnoreCase))
+        {
+            var routeKey = new[] { "fast", "proxy", "mirror", "direct" }
+                .Contains(routePreference, StringComparer.OrdinalIgnoreCase)
+                ? routePreference
+                : "fast";
+            var configured = Routes(url).First(route =>
+                route.Key.Equals(routeKey, StringComparison.OrdinalIgnoreCase));
+            lock (RouteGate)
+            {
+                SelectedRoutes[url] = configured.Url;
+            }
+            return (configured.Label, configured.Url);
+        }
+
         var ranked = await RankCandidatesAsync(url, cancellationToken);
         if (ranked.Count > 0)
         {
@@ -135,7 +189,7 @@ internal sealed class GitHubAcceleratedDownloader
             return selected;
         }
 
-        var fallback = DownloadCandidates(url)
+        var fallback = DownloadCandidates(url, routePreference)
             .Select(candidate => (
                 Label: candidate.Equals(url, StringComparison.Ordinal)
                     ? "直连 GitHub"

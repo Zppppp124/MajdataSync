@@ -227,6 +227,7 @@ internal static class Program
                 !args[0].StartsWith("gamestatus:", StringComparison.OrdinalIgnoreCase) &&
                 !args[0].StartsWith("catalogbench:", StringComparison.OrdinalIgnoreCase) &&
                 !args[0].StartsWith("resume:", StringComparison.OrdinalIgnoreCase) &&
+                !args[0].StartsWith("route-test:", StringComparison.OrdinalIgnoreCase) &&
                 !args[0].StartsWith("range-retry:", StringComparison.OrdinalIgnoreCase))
             {
                 if (args[0].StartsWith("installgame:", StringComparison.OrdinalIgnoreCase))
@@ -272,6 +273,7 @@ internal static class Program
                 !args[0].StartsWith("cache:", StringComparison.OrdinalIgnoreCase) &&
                 !args[0].StartsWith("gamedata:", StringComparison.OrdinalIgnoreCase) &&
                 !args[0].StartsWith("github-download:", StringComparison.OrdinalIgnoreCase) &&
+                !args[0].StartsWith("route-test:", StringComparison.OrdinalIgnoreCase) &&
                 !args[0].StartsWith("range-retry:", StringComparison.OrdinalIgnoreCase))
             {
                 var sampleRoot = FolderDetector.DetectFrom(args[0]);
@@ -401,6 +403,23 @@ internal static class Program
                 var root = Path.GetFullPath(args[0]["range-retry:".Length..]);
                 await TestRangeRetryAsync(root, CancellationToken.None);
                 Console.WriteLine("PASS: repeated range interruptions resumed to a complete file");
+                return 0;
+            }
+
+            if (args.Length == 1 &&
+                args[0].StartsWith("route-test:", StringComparison.OrdinalIgnoreCase))
+            {
+                var sample = "https://github.com/TeamMajdata/MajdataPlay_Build/archive.zip";
+                var fast = GitHubAcceleratedDownloader.DownloadCandidates(sample, "fast");
+                var proxy = GitHubAcceleratedDownloader.DownloadCandidates(sample, "proxy");
+                var auto = GitHubAcceleratedDownloader.DownloadCandidates(sample, "auto");
+                Assert(fast[0].StartsWith("https://ghfast.top/", StringComparison.Ordinal),
+                    "Fast should be the default first route");
+                Assert(proxy[0].StartsWith("https://gh-proxy.com/", StringComparison.Ordinal),
+                    "Proxy should be selectable as the first route");
+                Assert(auto.Count == 4,
+                    "Auto route should retain the full fallback list");
+                Console.WriteLine("PASS: Fast is default; Proxy and Auto route choices are available");
                 return 0;
             }
 

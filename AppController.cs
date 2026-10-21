@@ -419,7 +419,11 @@ internal sealed class AppController : IDisposable
 
     private Task SaveGameSourceAsync(JsonElement payload)
     {
+        var route = GetString(payload, "route");
         _settings.GameDownloadSource = "github";
+        _settings.GameDownloadRoute = route is "proxy" or "mirror" or "direct" or "auto"
+            ? route
+            : "fast";
         SettingsStore.Save(_settings);
         return Task.CompletedTask;
     }
@@ -433,6 +437,7 @@ internal sealed class AppController : IDisposable
             gameRoot = root ?? "",
             installed = root is not null && GameManager.IsInstalled(root),
             source = _settings.GameDownloadSource,
+            downloadRoute = _settings.GameDownloadRoute,
             channel = prerelease ? "prerelease" : "stable",
             nightlyAvailable = root is not null && GameManager.HasNightlyUpdate(root),
             skins = root is null ? new List<SkinItem>() : GameManager.GetInstalledSkins(root)
@@ -481,11 +486,21 @@ internal sealed class AppController : IDisposable
                 }));
             if (GameManager.IsInstalled(root))
             {
-                await _game.SwitchChannelAsync(root, prerelease, status, _operation!.Token);
+                await _game.SwitchChannelAsync(
+                    root,
+                    prerelease,
+                    _settings.GameDownloadRoute,
+                    status,
+                    _operation!.Token);
             }
             else
             {
-                await _game.InstallGameAsync(root, prerelease, status, _operation!.Token);
+                await _game.InstallGameAsync(
+                    root,
+                    prerelease,
+                    _settings.GameDownloadRoute,
+                    status,
+                    _operation!.Token);
             }
             _settings.GameChannel = prerelease ? "prerelease" : "stable";
             SettingsStore.Save(_settings);
@@ -560,7 +575,12 @@ internal sealed class AppController : IDisposable
                     message = value.Message,
                     progress = value.Progress
                 }));
-            await _game.InstallGameAsync(target, prerelease, status, _operation!.Token);
+            await _game.InstallGameAsync(
+                target,
+                prerelease,
+                _settings.GameDownloadRoute,
+                status,
+                _operation!.Token);
             var detected = FolderDetector.DetectFrom(target);
             if (detected is not null)
             {
@@ -671,7 +691,12 @@ internal sealed class AppController : IDisposable
                         progress = value.Progress,
                         indeterminate = value.Progress is null
                     }));
-                await _game.SwitchChannelAsync(root, true, switchStatus, _operation!.Token);
+                await _game.SwitchChannelAsync(
+                    root,
+                    true,
+                    _settings.GameDownloadRoute,
+                    switchStatus,
+                    _operation!.Token);
                 _settings.GameChannel = "prerelease";
                 SettingsStore.Save(_settings);
                 _pendingGameUpdates = [];
@@ -721,6 +746,7 @@ internal sealed class AppController : IDisposable
             await _game.UpdateGameAsync(
                 root,
                 _pendingGameUpdates,
+                _settings.GameDownloadRoute,
                 status,
                 _operation!.Token);
             await SendAsync("operation", new
@@ -2102,7 +2128,7 @@ internal sealed class AppController : IDisposable
         return SendAsync("state", new AppStatus
         {
             OperationRunning = _operationRunning,
-            Version = "1.9.1",
+            Version = "1.9.2",
             Site = ChartApi.SiteUrl
         });
     }

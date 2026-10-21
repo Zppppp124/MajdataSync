@@ -63,6 +63,7 @@ internal sealed class GameManager
     public async Task InstallGameAsync(
         string targetRoot,
         bool prerelease,
+        string routePreference,
         IProgress<(string Message, double? Progress)> progress,
         CancellationToken cancellationToken)
     {
@@ -71,6 +72,7 @@ internal sealed class GameManager
             await InstallStableFromFilesAsync(
                 targetRoot,
                 preserveUserData: false,
+                routePreference,
                 progress,
                 cancellationToken);
             return;
@@ -80,6 +82,7 @@ internal sealed class GameManager
             targetRoot,
             prerelease,
             preserveUserData: false,
+            routePreference,
             progress,
             cancellationToken);
     }
@@ -87,6 +90,7 @@ internal sealed class GameManager
     public async Task SwitchChannelAsync(
         string targetRoot,
         bool prerelease,
+        string routePreference,
         IProgress<(string Message, double? Progress)> progress,
         CancellationToken cancellationToken)
     {
@@ -95,6 +99,7 @@ internal sealed class GameManager
             await InstallStableFromFilesAsync(
                 targetRoot,
                 preserveUserData: true,
+                routePreference,
                 progress,
                 cancellationToken);
             return;
@@ -104,6 +109,7 @@ internal sealed class GameManager
             targetRoot,
             prerelease,
             preserveUserData: true,
+            routePreference,
             progress,
             cancellationToken);
     }
@@ -111,6 +117,7 @@ internal sealed class GameManager
     private async Task InstallStableFromFilesAsync(
         string targetRoot,
         bool preserveUserData,
+        string routePreference,
         IProgress<(string Message, double? Progress)> progress,
         CancellationToken cancellationToken)
     {
@@ -166,6 +173,7 @@ internal sealed class GameManager
                 await DownloadAcceleratedFileAsync(
                     entry,
                     destination,
+                    routePreference,
                     cancellationToken);
             }
 
@@ -199,6 +207,7 @@ internal sealed class GameManager
         string targetRoot,
         bool prerelease,
         bool preserveUserData,
+        string routePreference,
         IProgress<(string Message, double? Progress)> progress,
         CancellationToken cancellationToken)
     {
@@ -239,7 +248,8 @@ internal sealed class GameManager
                                 $"下载线路 {value.Source} · {FormatBytes(value.Bytes)} · {speed.TrimStart(' ', '·')}",
                                 ratio));
                         }),
-                        cancellationToken);
+                        cancellationToken,
+                        routePreference);
                     if (new FileInfo(zipPath).Length < 1_000_000)
                     {
                         throw new InvalidDataException($"{sourceName} 没有返回完整游戏包");
@@ -474,6 +484,7 @@ internal sealed class GameManager
         await manager.InstallGameAsync(
             targetRoot,
             prerelease: false,
+            routePreference: "fast",
             progress,
             cancellationToken);
     }
@@ -490,20 +501,17 @@ internal sealed class GameManager
     private static async Task DownloadAcceleratedFileAsync(
         GameHashEntry file,
         string destination,
+        string routePreference,
         CancellationToken cancellationToken)
     {
         var encodedPath = string.Join('/', file.FilePath.Split('/').Select(Uri.EscapeDataString));
         var url = "https://raw.githubusercontent.com/TeamMajdata/MajdataPlay_Build/main/" + encodedPath;
         Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
         var partPath = destination + ".part";
-        var candidates = (await GitHubAcceleratedDownloader.RankCandidatesAsync(
-                url,
-                cancellationToken))
-            .Select(candidate => candidate.Url)
-            .Concat(GitHubAcceleratedDownloader.CandidateUrls(url))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
+        var candidates = GitHubAcceleratedDownloader
+            .DownloadCandidates(url, routePreference)
             .ToList();
-        for (var attempt = 0; attempt < 12; attempt++)
+        for (var attempt = 0; ; attempt++)
         {
             cancellationToken.ThrowIfCancellationRequested();
             var candidate = candidates.Count > 0
@@ -875,6 +883,7 @@ internal sealed class GameManager
     public async Task UpdateGameAsync(
         string gameRoot,
         IReadOnlyList<GameHashEntry> files,
+        string routePreference,
         IProgress<(string Message, double? Progress)> progress,
         CancellationToken cancellationToken)
     {
@@ -907,6 +916,7 @@ internal sealed class GameManager
                     await DownloadGameFileResumableAsync(
                         file,
                         destination,
+                        routePreference,
                         cancellationToken);
                     pending.Remove(file.FilePath);
                     completedThisRun++;
@@ -941,6 +951,7 @@ internal sealed class GameManager
     private async Task DownloadGameFileResumableAsync(
         GameHashEntry file,
         string destination,
+        string routePreference,
         CancellationToken cancellationToken)
     {
         var hosts = new[]
@@ -957,13 +968,10 @@ internal sealed class GameManager
             Timeout = TimeSpan.FromSeconds(45)
         };
         http.DefaultRequestHeaders.UserAgent.ParseAdd("MajdataSync/1.5");
-        var acceleratedUrls = (await GitHubAcceleratedDownloader.RankCandidatesAsync(
-                url,
-                cancellationToken))
-            .Select(candidate => candidate.Url)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
+        var acceleratedUrls = GitHubAcceleratedDownloader
+            .DownloadCandidates(url, routePreference)
             .ToList();
-        for (var attempt = 0; attempt < 6; attempt++)
+        for (var attempt = 0; ; attempt++)
         {
             cancellationToken.ThrowIfCancellationRequested();
             var candidateUrl = acceleratedUrls.Count > 0
