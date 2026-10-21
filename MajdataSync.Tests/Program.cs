@@ -123,6 +123,79 @@ internal static class Program
                 "Online endpoint should save the selected source");
             Assert(savedEndpoints.GetProperty("Username").GetString() == "keep-me",
                 "Changing the endpoint should preserve login fields");
+            var candidateUrls = GitHubAcceleratedDownloader.CandidateUrls(
+                "https://github.com/TeamMajdata/MajdataPlay_Build/archive/refs/tags/LATEST.zip");
+            Assert(candidateUrls.Count == 4, "GitHub acceleration should test three mirrors plus direct");
+            Assert(candidateUrls[0].StartsWith("https://ghfast.top/https://github.com/", StringComparison.Ordinal),
+                "GitHub acceleration should try the fast mirror first");
+            Assert(candidateUrls[^1].StartsWith("https://github.com/", StringComparison.Ordinal),
+                "GitHub acceleration should keep a direct fallback");
+
+            var selectionCharts = new[]
+            {
+                new ChartItem { Id = "chart-a", Title = "A", Hash = "hash-a", Timestamp = DateTimeOffset.Now },
+                new ChartItem { Id = "chart-b", Title = "B", Hash = "hash-b", Timestamp = DateTimeOffset.Now },
+                new ChartItem { Id = "chart-c", Title = "C", Hash = "hash-c", Timestamp = DateTimeOffset.Now }
+            };
+            using (var selectionController = new AppController(null))
+            {
+                var selected = selectionController.SelectChartsForTest(
+                    selectionCharts,
+                    new SyncInventory(),
+                    new SyncRequest { ChartIds = ["chart-b"] });
+                Assert(selected.Count == 1 && selected[0].Id == "chart-b",
+                    "Batch selection should download only checked charts");
+            }
+
+            var persistentOriginal = Path.Combine(testRoot, "PersistentCharts", "Original");
+            Directory.CreateDirectory(persistentOriginal);
+            var persistentStore = new InventoryStore(persistentOriginal);
+            var persistentInventory = await persistentStore.LoadAsync(CancellationToken.None);
+            persistentInventory.Charts["chart-a"] = new SyncRecord
+            {
+                ChartId = "chart-a",
+                Folder = "A",
+                Hash = "hash-a",
+                DownloadedAt = DateTimeOffset.Now
+            };
+            await persistentStore.SaveAsync(persistentInventory, CancellationToken.None);
+            var reloadedInventory = await persistentStore.LoadAsync(CancellationToken.None);
+            Assert(reloadedInventory.Charts.ContainsKey("chart-a"),
+                "Each completed chart should persist even when a later batch is interrupted");
+
+            var switchSource = Path.Combine(testRoot, "SwitchSource");
+            var switchStage = Path.Combine(testRoot, "SwitchStage");
+            var switchTarget = Path.Combine(testRoot, "SwitchTarget");
+            foreach (var path in new[] { switchSource, switchStage, switchTarget })
+            {
+                Directory.CreateDirectory(path);
+            }
+            foreach (var directory in new[] { "MaiCharts", "Skins", "Cache", "RecordOutputs" })
+            {
+                Directory.CreateDirectory(Path.Combine(switchSource, directory, "keep"));
+                File.WriteAllText(Path.Combine(switchSource, directory, "keep", "new.txt"), directory);
+                Directory.CreateDirectory(Path.Combine(switchTarget, directory, "keep"));
+                File.WriteAllText(Path.Combine(switchTarget, directory, "keep", "data.txt"), directory);
+            }
+            File.WriteAllText(Path.Combine(switchSource, "settings.json"), "{\"Display\":{\"Skin\":\"source\"}}");
+            File.WriteAllText(Path.Combine(switchSource, "MajdataPlay.exe"), "old");
+            File.WriteAllText(Path.Combine(switchStage, "MajdataPlay.exe"), "new");
+            Directory.CreateDirectory(Path.Combine(switchStage, "game-libs"));
+            File.WriteAllText(Path.Combine(switchStage, "game-libs", "runtime.dll"), "new");
+            File.WriteAllText(Path.Combine(switchTarget, "settings.json"), "{\"Display\":{\"Skin\":\"target\"}}");
+            File.WriteAllText(Path.Combine(switchTarget, "MajdataPlay.exe"), "old");
+            GameManager.PreserveUserDataForTest(switchSource, switchStage, switchTarget);
+            Assert(File.ReadAllText(Path.Combine(switchTarget, "MajdataPlay.exe")) == "new",
+                "Channel switch should replace game binaries");
+            Assert(File.ReadAllText(Path.Combine(switchTarget, "settings.json")).Contains("\"Skin\":\"target\""),
+                "Channel switch should preserve the target settings.json");
+            foreach (var directory in new[] { "MaiCharts", "Skins", "Cache", "RecordOutputs" })
+            {
+                Assert(File.ReadAllText(Path.Combine(switchTarget, directory, "keep", "data.txt")) == directory,
+                    "Channel switch should preserve " + directory);
+            }
+            Assert(Directory.Exists(Path.Combine(switchTarget, "game-libs")),
+                "Channel switch should install new game directories");
 
             if (args.Length == 1 &&
                 !args[0].StartsWith("gamestatus:", StringComparison.OrdinalIgnoreCase) &&
@@ -135,9 +208,8 @@ internal static class Program
                     using var installApi = new ChartApi();
                     var installManager = new GameManager(installApi);
                     var reports = 0;
-                    await installManager.InstallGameAsync(
+                    await GameManager.InstallStableFilesForTestAsync(
                         installTarget,
-                        useCnb: true,
                         new Progress<(string Message, double? Progress)>(value =>
                         {
                             reports++;

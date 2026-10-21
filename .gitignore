@@ -30,4 +30,7 @@ majdata-settings-summary.txt
 setting-details.txt
 *.part
 *.tmp
+.majdata-game-download.zip*
+.majdata-stable-stage/
+live-game-*/
 

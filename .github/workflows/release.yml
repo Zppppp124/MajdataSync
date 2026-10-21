@@ -29,20 +29,20 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          name: Majdata Sync v1.7.1
+          name: Majdata Sync v1.8.0
           body: |
-            ## Majdata Sync v1.7.1
+            ## Majdata Sync v1.8.0
 
             本次发布包含完整的 Windows x64 自包含版本，无需单独安装 .NET。
 
             ### 主要更新
 
-            - 曲库索引改为完整接口加载，并支持本地缓存秒开与后台刷新
-            - 后台校验索引不再锁定界面，也不显示右下角操作条
-            - 游戏管理支持 CNB / GitHub 下载源、启动与断点续传更新
-            - 支持在线皮肤下载、应用与游戏内置设置编辑
-            - 高级设置提供中文说明、有效值、默认值、分组和搜索
-            - 优化下载速度、镜像优选与网络失败自动回退
+            - 曲目卡支持勾选并批量下载所选谱面
+            - 每首曲目下载完成后立即入库，中断后无需重下已完成曲目
+            - 稳定版固定从 MajdataPlay_Build 获取，测试版使用 MajdataPlay nightly
+            - 内嵌 ReleaseFlow 的 GitHub 三路镜像测速与并行下载方案
+            - 稳定版 / 测试版可切换，曲目、皮肤、缓存、成绩输出和设置会保留
+            - 测试版更新改为下载完整 nightly 包后安全替换程序文件
           files: ${{ env.RELEASE_ASSET }}
           fail_on_unmatched_files: true
           overwrite_files: true

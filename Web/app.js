@@ -51,6 +51,7 @@
     catalogMeta: { total: 0, filtered: 0, downloaded: 0, newCount: 0, page: 0, pageCount: 1, pageSize: 24 },
     statusFilter: 'all',
     search: '',
+    selectedCharts: new Set(),
     gameStatus: null,
     gameSettings: null,
     onlineSources: [],
@@ -178,7 +179,7 @@
     grid.innerHTML = items.map((item) => {
       const stateClass = item.stale ? 'stale' : item.downloaded ? 'downloaded' : '';
       return `
-        <article class="chart-card ${stateClass}" data-id="${escapeHtml(item.id)}">
+        <article class="chart-card ${stateClass} ${state.selectedCharts.has(item.id) ? 'selected' : ''}" data-id="${escapeHtml(item.id)}">
           <div class="chart-cover">
             <img src="${escapeHtml(item.image)}" alt="${escapeHtml(item.title)}" loading="lazy" referrerpolicy="no-referrer"
               onerror="this.style.display='none'">
@@ -186,6 +187,10 @@
             <span class="cover-state ${item.downloaded && !item.stale ? '' : 'new'}" title="${item.stale ? '有更新' : item.downloaded ? '已入库' : '未下载'}">
               <span data-icon="${item.stale ? 'rotate-cw' : item.downloaded ? 'check' : 'download'}"></span>
             </span>
+            <label class="chart-select" title="选择此曲目">
+              <input type="checkbox" data-select-chart="${escapeHtml(item.id)}" ${state.selectedCharts.has(item.id) ? 'checked' : ''}>
+              <span></span>
+            </label>
             <button class="chart-download" data-download="${escapeHtml(item.id)}" title="${item.downloaded ? '重新下载' : '下载此谱面'}" aria-label="下载">
               <span data-icon="${item.downloaded ? 'refresh-cw' : 'download'}"></span>
             </button>
@@ -201,7 +206,15 @@
         </article>`;
     }).join('');
     hydrateIcons(grid);
+    updateSelectionBar();
     renderPager();
+  }
+
+  function updateSelectionBar() {
+    const count = state.selectedCharts.size;
+    $('#selectionCount').textContent = count ? `已选择 ${count} 首曲目` : '未选择曲目';
+    $('#clearSelection').disabled = count === 0;
+    $('#downloadSelected').disabled = count === 0;
   }
 
   function renderPager() {
@@ -285,24 +298,50 @@
   function renderGameStatus(payload) {
     state.gameStatus = payload;
     const installed = !!payload.installed;
+    const noGameFolder = !payload.gameRoot;
     $('#gamePathText').textContent = payload.gameRoot
       ? (installed ? '游戏已安装，可以启动或检查更新' : '已选择安装目录，可以下载游戏')
       : '尚未选择游戏目录';
     $('#gameFolderPath').textContent = payload.gameRoot || '未设置';
-    $('#gameSource').value = payload.source || 'cnb';
-    $('#installGame').disabled = false;
-    $('#installGame').innerHTML = installed
-      ? '<span data-icon="rotate-cw"></span> 重新安装'
-      : '<span data-icon="download"></span> 下载安装';
+    const channel = payload.channel === 'prerelease' ? 'prerelease' : 'stable';
+    $('#gameChannel').value = channel;
+    $('#gameChannelHint').textContent = channel === 'prerelease'
+      ? '测试版从 MajdataPlay 的 nightly 包更新，由 GitHub 加速线路下载。'
+      : '稳定版固定从 MajdataPlay_Build 获取，由 GitHub 加速线路下载。';
+    if (installed && channel === 'stable') {
+      state.gameUpdates = 0;
+      $('#gameUpdateText').textContent = '检查游戏文件是否与最新稳定构建一致';
+      $('#updateGame').disabled = true;
+    }
+    if (!installed) {
+      state.gameUpdates = 0;
+      $('#gameUpdateText').textContent = '安装游戏后可检查更新';
+      $('#updateGame').disabled = true;
+    }
+    $('#gameChannel').disabled = noGameFolder;
+    $('#installGame').disabled = noGameFolder;
+    $('#installGame').innerHTML = noGameFolder
+      ? '<span data-icon="folder-open"></span> 先选择目录'
+      : installed
+        ? '<span data-icon="rotate-cw"></span> 重新安装'
+        : '<span data-icon="download"></span> 下载安装';
     hydrateIcons($('#installGame'));
-    $('#installGameHint').textContent = installed
-      ? '当前已安装；重新下载会覆盖游戏文件，但保留曲目与皮肤。'
-      : '下载后自动解压到所选游戏目录';
+    $('#installGameHint').textContent = noGameFolder
+      ? '先选择安装目录，再选择稳定版或测试版。'
+      : installed
+        ? '重新安装会覆盖程序文件，保留曲目、皮肤、缓存和设置。'
+        : '下载后自动解压到所选游戏目录';
     $('#launchGame').disabled = !installed;
+    $('#gameChannel').disabled = noGameFolder || !installed;
     $('#checkGameUpdate').disabled = !installed;
     $('#saveGameSettings').disabled = !installed;
     $('#loadAdvancedSettings').disabled = !installed;
     $('#saveAdvancedSettings').disabled = !installed;
+    if (installed && channel === 'prerelease') {
+      state.gameUpdates = 0;
+      $('#gameUpdateText').textContent = '测试版更新会下载最新 nightly 完整包';
+      $('#updateGame').disabled = false;
+    }
     renderInstalledSkins(payload.skins || []);
   }
 
@@ -780,6 +819,7 @@
     post('sync', {
       updatedOnly,
       chartId: extra.chartId || null,
+      chartIds: extra.chartIds || [],
       dateFrom: extra.dateFrom || state.dateFrom || null,
       dateTo: extra.dateTo || state.dateTo || null,
       search: state.search || null,
@@ -788,6 +828,39 @@
       concurrency: Number($('#concurrencyRange').value || 6),
       storageTarget: state.storageTarget
     });
+    switchView('tasks');
+  }
+
+  function requestSelectedSync() {
+    if (!state.folder?.detected) {
+      showToast('请先选择 Majdata 的 Original 文件夹', 'warning');
+      openModal('tourModal');
+      return;
+    }
+    const chartIds = [...state.selectedCharts];
+    if (chartIds.length === 0) return;
+    $('#taskList').querySelectorAll('.task-row').forEach((row) => row.remove());
+    state.tasks.clear();
+    $('#navTaskCount').textContent = '0';
+    $('#taskEmpty').classList.remove('hidden');
+    $('#queueResult').textContent = '任务进行中';
+    post('sync', {
+      updatedOnly: false,
+      chartIds,
+      dateFrom: null,
+      dateTo: null,
+      search: null,
+      limit: null,
+      includeVideo: $('#includeVideo').checked,
+      concurrency: Number($('#concurrencyRange').value || 6),
+      storageTarget: state.storageTarget
+    });
+    state.selectedCharts.clear();
+    $$('#chartGrid [data-select-chart]').forEach(input => {
+      input.checked = false;
+      input.closest('.chart-card')?.classList.remove('selected');
+    });
+    updateSelectionBar();
     switchView('tasks');
   }
 
@@ -998,6 +1071,39 @@
       if (!download) return;
       requestSync(false, { chartId: download.dataset.download });
     });
+    $('#chartGrid').addEventListener('click', (event) => {
+      const card = event.target.closest('.chart-card');
+      if (!card || event.target.closest('button') || event.target.closest('label')) return;
+      state.selectedCharts.has(card.dataset.id)
+        ? state.selectedCharts.delete(card.dataset.id)
+        : state.selectedCharts.add(card.dataset.id);
+      const input = $(`[data-select-chart="${CSS.escape(card.dataset.id)}"]`, card);
+      if (input) input.checked = state.selectedCharts.has(card.dataset.id);
+      card.classList.toggle('selected', input?.checked === true);
+      updateSelectionBar();
+    });
+    $('#chartGrid').addEventListener('change', (event) => {
+      const checkbox = event.target.closest('[data-select-chart]');
+      if (!checkbox) return;
+      if (checkbox.checked) {
+        state.selectedCharts.add(checkbox.dataset.selectChart);
+      } else {
+        state.selectedCharts.delete(checkbox.dataset.selectChart);
+      }
+      checkbox.closest('.chart-card')?.classList.toggle('selected', checkbox.checked);
+      updateSelectionBar();
+    });
+    $('#clearSelection').addEventListener('click', () => {
+      state.selectedCharts.clear();
+      $$('#chartGrid [data-select-chart]').forEach(input => {
+        input.checked = false;
+        input.closest('.chart-card')?.classList.remove('selected');
+      });
+      updateSelectionBar();
+    });
+    $('#downloadSelected').addEventListener('click', () => {
+      requestSelectedSync();
+    });
     $('#siteLink').addEventListener('click', (event) => {
       event.preventDefault();
       post('openSite');
@@ -1065,13 +1171,29 @@
     });
     $('#chooseGameFolder').addEventListener('click', () => post('chooseGameFolder'));
     $('#installGame').addEventListener('click', () => {
-      if (!confirm('将从所选下载源下载完整 MajdataPlay 游戏包并解压到游戏目录，继续吗？')) return;
-      post('installGame', { source: $('#gameSource').value });
+      if (!state.gameStatus?.gameRoot) {
+        post('chooseGameFolder');
+        return;
+      }
+      if (!confirm('将下载完整 MajdataPlay 游戏包并解压到游戏目录，继续吗？')) return;
+      post('installGame', { channel: $('#gameChannel').value });
       switchView('tasks');
     });
-    $('#gameSource').addEventListener('change', () => {
-      post('saveGameSource', { source: $('#gameSource').value });
-      showToast('游戏下载源已切换', 'success');
+    $('#gameChannel').addEventListener('change', () => {
+      const channel = $('#gameChannel').value;
+      const current = state.gameStatus?.channel || 'stable';
+      if (channel === current) return;
+      const label = channel === 'prerelease' ? '测试版' : '稳定版';
+      const confirmed = confirm(
+        `切换到${label}会重新下载该通道的完整游戏包。` +
+        '曲目、皮肤、缓存、成绩输出和设置都会保留，继续吗？'
+      );
+      if (!confirmed) {
+        $('#gameChannel').value = current;
+        return;
+      }
+      post('switchGameChannel', { channel });
+      switchView('tasks');
     });
     $('#checkGameUpdate').addEventListener('click', () => post('checkGameUpdate'));
     $('#updateGame').addEventListener('click', () => post('updateGame'));
@@ -1281,9 +1403,6 @@
           break;
         case 'onlineSourceLatency':
           renderOnlineSourceLatency(payload);
-          break;
-        case 'gameSource':
-          $('#gameSource').value = payload.source || 'cnb';
           break;
         case 'gameUpdates':
           state.gameUpdates = payload.count || 0;

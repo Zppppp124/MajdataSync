@@ -41,7 +41,6 @@ internal sealed class AppController : IDisposable
         await SendSettingsAsync(firstRun: !_settings.FirstRunCompleted);
         await SendStateAsync();
         await LoadCachedCatalogAsync();
-        await SendAsync("gameSource", new { source = _settings.GameDownloadSource });
         await SendAsync("networkNode", new
         {
             node = "",
@@ -155,6 +154,9 @@ internal sealed class AppController : IDisposable
                 break;
             case "saveGameSource":
                 await SaveGameSourceAsync(payload);
+                break;
+            case "switchGameChannel":
+                await SwitchGameChannelAsync(payload);
                 break;
             case "openChart":
                 OpenChart(payload);
@@ -415,27 +417,98 @@ internal sealed class AppController : IDisposable
         });
     }
 
-    private async Task SaveGameSourceAsync(JsonElement payload)
+    private Task SaveGameSourceAsync(JsonElement payload)
     {
-        var source = GetString(payload, "source");
-        _settings.GameDownloadSource = source.Equals("github", StringComparison.OrdinalIgnoreCase)
-            ? "github"
-            : "cnb";
+        _settings.GameDownloadSource = "github";
         SettingsStore.Save(_settings);
-        await SendAsync("gameSource", new { source = _settings.GameDownloadSource });
+        return Task.CompletedTask;
     }
 
     private async Task SendGameStatusAsync()
     {
         var root = CurrentGameRoot;
+        var prerelease = root is not null && GameManager.IsPrerelease(root);
         await SendAsync("gameStatus", new
         {
             gameRoot = root ?? "",
             installed = root is not null && GameManager.IsInstalled(root),
             source = _settings.GameDownloadSource,
-            recommendedSource = "cnb",
+            channel = prerelease ? "prerelease" : "stable",
+            nightlyAvailable = root is not null && GameManager.HasNightlyUpdate(root),
             skins = root is null ? new List<SkinItem>() : GameManager.GetInstalledSkins(root)
         });
+    }
+
+    private async Task SwitchGameChannelAsync(JsonElement payload)
+    {
+        var root = CurrentGameRoot;
+        if (root is null || _operationRunning)
+        {
+            return;
+        }
+
+        var request = payload.Deserialize<GameChannelRequest>(JsonOptions.Default);
+        var prerelease = request?.Channel?.Equals("prerelease", StringComparison.OrdinalIgnoreCase) == true;
+        if (!Directory.Exists(root))
+        {
+            await SendAsync("toast", new { kind = "warning", message = "请先选择游戏目录" });
+            return;
+        }
+
+        if (GameManager.IsInstalled(root) && GameManager.IsPrerelease(root) == prerelease)
+        {
+            return;
+        }
+
+        BeginOperation();
+        try
+        {
+            await SendAsync("operation", new
+            {
+                stage = "download",
+                message = prerelease
+                    ? "正在切换测试版，曲目、皮肤、缓存和设置将保留…"
+                    : "正在切回稳定版，曲目、皮肤、缓存和设置将保留…",
+                indeterminate = true
+            });
+            var status = new Progress<(string Message, double? Progress)>(value =>
+                _ = SendAsync("operation", new
+                {
+                    stage = "download",
+                    message = value.Message,
+                    progress = value.Progress,
+                    indeterminate = value.Progress is null
+                }));
+            if (GameManager.IsInstalled(root))
+            {
+                await _game.SwitchChannelAsync(root, prerelease, status, _operation!.Token);
+            }
+            else
+            {
+                await _game.InstallGameAsync(root, prerelease, status, _operation!.Token);
+            }
+            _settings.GameChannel = prerelease ? "prerelease" : "stable";
+            SettingsStore.Save(_settings);
+            await SendAsync("operation", new
+            {
+                stage = "done",
+                message = prerelease ? "已切换到测试版" : "已切换到稳定版"
+            });
+            await SendGameStatusAsync();
+        }
+        catch (OperationCanceledException)
+        {
+            await SendAsync("operation", new { stage = "cancelled", message = "已取消版本切换" });
+        }
+        catch (Exception ex)
+        {
+            await SendAsync("operation", new { stage = "error", message = ex.Message });
+            await SendAsync("toast", new { kind = "error", message = "版本切换失败：" + ex.Message });
+        }
+        finally
+        {
+            EndOperation();
+        }
     }
 
     private async Task InstallGameAsync(JsonElement payload)
@@ -457,11 +530,13 @@ internal sealed class AppController : IDisposable
             return;
         }
 
+        var requestedChannel = GetString(payload, "channel");
+        var prerelease = requestedChannel.Equals("prerelease", StringComparison.OrdinalIgnoreCase) ||
+                         (string.IsNullOrWhiteSpace(requestedChannel) &&
+                          _settings.GameChannel.Equals("prerelease", StringComparison.OrdinalIgnoreCase));
         BeginOperation();
         try
         {
-            var source = GetString(payload, "source");
-            var useCnb = !source.Equals("github", StringComparison.OrdinalIgnoreCase);
             var selected = Path.GetFullPath(dialog.FolderName);
             var gameAlreadyExists = Directory.GetFiles(
                 selected,
@@ -475,7 +550,8 @@ internal sealed class AppController : IDisposable
                 ? selected
                 : Path.Combine(selected, "MajdataPlay");
             _settings.GameRootPath = target;
-            _settings.GameDownloadSource = useCnb ? "cnb" : "github";
+            _settings.GameDownloadSource = "github";
+            _settings.GameChannel = prerelease ? "prerelease" : "stable";
             SettingsStore.Save(_settings);
             var status = new Progress<(string Message, double? Progress)>(value =>
                 _ = SendAsync("operation", new
@@ -484,7 +560,7 @@ internal sealed class AppController : IDisposable
                     message = value.Message,
                     progress = value.Progress
                 }));
-            await _game.InstallGameAsync(target, useCnb, status, _operation!.Token);
+            await _game.InstallGameAsync(target, prerelease, status, _operation!.Token);
             var detected = FolderDetector.DetectFrom(target);
             if (detected is not null)
             {
@@ -528,10 +604,22 @@ internal sealed class AppController : IDisposable
         BeginOperation();
         try
         {
-            var source = _settings.GameDownloadSource != "github";
+            if (GameManager.IsPrerelease(root))
+            {
+                _pendingGameUpdates = [];
+                await SendAsync("gameUpdates", new { count = 0, files = Array.Empty<string>() });
+                await SendAsync("operation", new
+                {
+                    stage = "done",
+                    message = "测试版使用 nightly 通道；点击“更新”可下载最新完整包"
+                });
+                await SendGameStatusAsync();
+                return;
+            }
+
             _pendingGameUpdates = (await _game.CheckGameUpdateAsync(
                 root,
-                source,
+                useCnb: false,
                 _operation!.Token)).Files;
             await SendAsync("gameUpdates", new
             {
@@ -567,6 +655,41 @@ internal sealed class AppController : IDisposable
         BeginOperation();
         try
         {
+            if (GameManager.IsPrerelease(root))
+            {
+                await SendAsync("operation", new
+                {
+                    stage = "download",
+                    message = "正在下载测试版完整包，曲目、皮肤、缓存和设置将保留…",
+                    indeterminate = true
+                });
+                var switchStatus = new Progress<(string Message, double? Progress)>(value =>
+                    _ = SendAsync("operation", new
+                    {
+                        stage = "download",
+                        message = value.Message,
+                        progress = value.Progress,
+                        indeterminate = value.Progress is null
+                    }));
+                await _game.SwitchChannelAsync(root, true, switchStatus, _operation!.Token);
+                _settings.GameChannel = "prerelease";
+                SettingsStore.Save(_settings);
+                _pendingGameUpdates = [];
+                await SendAsync("gameUpdates", new { count = 0, files = Array.Empty<string>() });
+                await SendAsync("operation", new
+                {
+                    stage = "done",
+                    message = "测试版已更新到最新 nightly"
+                });
+                await SendGameStatusAsync();
+                await SendAsync("toast", new
+                {
+                    kind = "success",
+                    message = "MajdataPlay 测试版已更新到最新 nightly"
+                });
+                return;
+            }
+
             if (_pendingGameUpdates.Count == 0)
             {
                 _pendingGameUpdates = (await _game.CheckGameUpdateAsync(
@@ -597,7 +720,6 @@ internal sealed class AppController : IDisposable
                 }));
             await _game.UpdateGameAsync(
                 root,
-                _settings.GameDownloadSource != "github",
                 _pendingGameUpdates,
                 status,
                 _operation!.Token);
@@ -609,7 +731,7 @@ internal sealed class AppController : IDisposable
             });
             var remaining = (await _game.CheckGameUpdateAsync(
                 root,
-                _settings.GameDownloadSource != "github",
+                useCnb: false,
                 _operation!.Token)).Files;
             _pendingGameUpdates = remaining;
             await SendAsync("gameUpdates", new
@@ -1173,6 +1295,7 @@ internal sealed class AppController : IDisposable
         }
 
         var request = payload.Deserialize<SyncRequest>(JsonOptions.Default) ?? new SyncRequest();
+        request.ChartIds ??= [];
         request.IncludeVideo = GetBool(payload, "includeVideo", _settings.IncludeVideo);
         request.Concurrency = Math.Clamp(request.Concurrency, 1, 12);
         request.StorageTarget = ResolveStorageTarget(
@@ -1311,6 +1434,15 @@ internal sealed class AppController : IDisposable
                     try
                     {
                         inventory.Charts[chart.Id] = record;
+                        inventory.LastSyncAt = DateTimeOffset.Now;
+                        try
+                        {
+                            await store.SaveAsync(inventory, _operation.Token);
+                        }
+                        catch (OperationCanceledException) when (_operation.IsCancellationRequested)
+                        {
+                            await store.SaveAsync(inventory, CancellationToken.None);
+                        }
                     }
                     finally
                     {
@@ -1407,6 +1539,14 @@ internal sealed class AppController : IDisposable
         {
             query = query.Where(chart =>
                 chart.Id.Equals(request.ChartId, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (request.ChartIds.Count > 0)
+        {
+            var selectedIds = new HashSet<string>(
+                request.ChartIds.Where(id => !string.IsNullOrWhiteSpace(id)),
+                StringComparer.OrdinalIgnoreCase);
+            query = query.Where(chart => selectedIds.Contains(chart.Id));
         }
 
         if (request.UpdatedOnly)
@@ -1962,7 +2102,7 @@ internal sealed class AppController : IDisposable
         return SendAsync("state", new AppStatus
         {
             OperationRunning = _operationRunning,
-            Version = "1.7.1",
+            Version = "1.8.0",
             Site = ChartApi.SiteUrl
         });
     }
@@ -2068,6 +2208,12 @@ internal sealed class AppController : IDisposable
         _charts = await _api.GetAllChartsAsync(null, cancellationToken);
         return _charts.Count;
     }
+
+    public List<ChartItem> SelectChartsForTest(
+        IEnumerable<ChartItem> charts,
+        SyncInventory inventory,
+        SyncRequest request)
+        => SelectCharts(charts, inventory, request);
 
     public void Dispose()
     {

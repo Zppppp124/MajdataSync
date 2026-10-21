@@ -1086,6 +1086,25 @@ input[type="range"] {
   font-size: 9px;
 }
 
+.selection-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-height: 42px;
+  margin: 0 0 10px;
+  padding: 6px 10px;
+  border: 1px solid rgba(104, 161, 190, 0.16);
+  border-radius: 7px;
+  background: rgba(239, 250, 255, 0.78);
+}
+
+.selection-count {
+  margin-right: auto;
+  color: #5f8499;
+  font-size: 10px;
+}
+
 .catalog-pager {
   display: flex;
   align-items: center;
@@ -1193,10 +1212,53 @@ input[type="range"] {
   pointer-events: none;
 }
 
-.cover-label {
+.chart-select {
   position: absolute;
   top: 9px;
   left: 9px;
+  z-index: 4;
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.82);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 3px 10px rgba(48, 102, 130, 0.16);
+  cursor: pointer;
+}
+
+.chart-select input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.chart-select span {
+  width: 12px;
+  height: 12px;
+  border: 1.5px solid #96b7c8;
+  border-radius: 50%;
+  transition: background 140ms ease, border-color 140ms ease;
+}
+
+.chart-select input:checked + span {
+  border-color: #5bb9da;
+  background: #5bb9da;
+  box-shadow: inset 0 0 0 3px #fff;
+}
+
+.chart-card.selected {
+  border-color: rgba(83, 181, 217, 0.62);
+  box-shadow: 0 0 0 2px rgba(83, 181, 217, 0.1);
+}
+
+.cover-label {
+  position: absolute;
+  top: 9px;
+  left: 41px;
   z-index: 2;
   padding: 4px 6px;
   border: 1px solid rgba(255, 255, 255, 0.15);

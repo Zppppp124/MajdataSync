@@ -53,7 +53,7 @@
 
       <div class="sidebar-foot">
         <a href="#" id="siteLink" class="site-link">majdata.net <span data-icon="arrow-up-right"></span></a>
-        <span>本地同步工具 · v1.7.1</span>
+        <span>本地同步工具 · v1.8.0</span>
       </div>
     </aside>
 
@@ -219,6 +219,11 @@
           <span id="catalogSummary">尚未读取索引</span>
           <span id="indexTime"></span>
         </div>
+        <div class="selection-bar" id="selectionBar">
+          <span class="selection-count" id="selectionCount">未选择曲目</span>
+          <button class="button ghost" id="clearSelection" disabled>清除选择</button>
+          <button class="button primary" id="downloadSelected" disabled><span data-icon="download"></span> 下载所选</button>
+        </div>
         <div class="chart-grid" id="chartGrid"></div>
         <div class="catalog-pager hidden" id="catalogPager">
           <button class="icon-button" id="pagePrev" title="上一页" aria-label="上一页"><span data-icon="chevron-left"></span></button>
@@ -303,12 +308,12 @@
             </div>
             <div class="setting-row">
               <div>
-                <strong>安装来源</strong>
-                <span>CNB 国内线路实测明显更快，推荐使用</span>
+                <strong>游戏版本</strong>
+                <span id="gameChannelHint">稳定版固定从 MajdataPlay_Build 获取，由 GitHub 加速线路下载。</span>
               </div>
-              <select class="select-control" id="gameSource">
-                <option value="cnb">CNB（推荐）</option>
-                <option value="github">GitHub（国际）</option>
+              <select class="select-control" id="gameChannel" disabled>
+                <option value="stable">稳定版</option>
+                <option value="prerelease">测试版 nightly</option>
               </select>
             </div>
             <div class="setting-row">

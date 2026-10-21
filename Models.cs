@@ -54,7 +54,8 @@ internal sealed class AppSettings
     public string DownloadMode { get; set; } = "auto";
     public bool UseMirrors { get; set; } = true;
     public string StorageTarget { get; set; } = "both";
-    public string GameDownloadSource { get; set; } = "cnb";
+    public string GameDownloadSource { get; set; } = "github";
+    public string GameChannel { get; set; } = "stable";
     public string? GameRootPath { get; set; }
 }
 
@@ -95,6 +96,7 @@ internal sealed class SyncRequest
 {
     public bool UpdatedOnly { get; set; }
     public string? ChartId { get; set; }
+    public List<string> ChartIds { get; set; } = [];
     public string? DateFrom { get; set; }
     public string? DateTo { get; set; }
     public string? Search { get; set; }
@@ -137,7 +139,13 @@ internal sealed class CatalogSnapshot
 internal sealed class GameInstallRequest
 {
     public string? Source { get; set; }
+    public string? Channel { get; set; }
     public string? TargetPath { get; set; }
+}
+
+internal sealed class GameChannelRequest
+{
+    public string? Channel { get; set; }
 }
 
 internal sealed class GameLaunchRequest
