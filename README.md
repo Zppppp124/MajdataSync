@@ -22,9 +22,9 @@
 
 ## 下载
 
-当前版本：**v1.10.0**
+当前版本：**v1.11.0**
 
-[**下载 Windows x64 自包含版本**](https://github.com/Zppppp124/MajdataSync/releases/download/v1.10.0/MajdataSync-win-x64-v1.10.0.zip) · [离线 HTML 使用说明书](docs/MajdataSync-Manual.html) · [查看全部版本](https://github.com/Zppppp124/MajdataSync/releases)
+[**下载 Windows x64 自包含版本**](https://github.com/Zppppp124/MajdataSync/releases/download/v1.11.0/MajdataSync-win-x64-v1.11.0.zip) · [离线 HTML 使用说明书](docs/MajdataSync-Manual.html) · [查看全部版本](https://github.com/Zppppp124/MajdataSync/releases)
 
 Windows 10/11 可直接运行，无需单独安装 .NET。程序界面使用 WebView2，大多数 Windows 10/11 已预装该运行时。
 
@@ -44,6 +44,10 @@ Windows 10/11 可直接运行，无需单独安装 .NET。程序界面使用 Web
 
 ### 选择与批量下载
 
+- 顶部曲目目标可选择“置于稳定版”“置于测试版”或“共存（两版）”。
+- “置于稳定版/测试版”只写入对应游戏目录；对应目录尚未设置时会先要求选择。
+- “共存”先检测稳定版，再检测测试版；两套游戏目录都存在时，下载一次并复制曲目与在线缓存到另一版本。
+- 共存模式只检测到一套游戏目录时，只写入该版本，不复制，也不要求另一版本存在。
 - 曲目卡左上角有可勾选圆点，选择后“下载所选”按钮启用，只处理打勾曲目。
 - “同步新谱面”只同步未下载或站点哈希已变化的版本。
 - “下载全部谱面”与筛选结果适合补抓整个时间段或完整曲库。

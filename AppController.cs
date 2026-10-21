@@ -30,7 +30,7 @@ internal sealed class AppController : IDisposable
 
     public async Task InitializeAsync()
     {
-        _folder = TryRestoreFolder() ?? FolderDetector.DetectNearby(AppContext.BaseDirectory);
+        _folder = ResolveChartFolder();
         if (_folder is not null)
         {
             _settings.LastRootPath = _folder.RootPath;
@@ -38,6 +38,11 @@ internal sealed class AppController : IDisposable
         }
 
         await SendAsync("folder", FolderPayload(_folder));
+        await SendAsync("chartTarget", new
+        {
+            target = _settings.ChartTarget,
+            folder = _folder?.RootPath ?? ""
+        });
         await SendSettingsAsync(firstRun: !_settings.FirstRunCompleted);
         await SendStateAsync();
         await LoadCachedCatalogAsync();
@@ -100,6 +105,12 @@ internal sealed class AppController : IDisposable
                 break;
             case "saveSettings":
                 await SaveSettingsAsync(payload);
+                break;
+            case "saveChartTarget":
+                await SaveChartTargetAsync(payload);
+                break;
+            case "chooseChartFolder":
+                await ChooseChartFolderAsync(payload);
                 break;
             case "testNetwork":
                 await TestNetworkAsync();
@@ -188,12 +199,6 @@ internal sealed class AppController : IDisposable
         }
     }
 
-    private FolderInfo? TryRestoreFolder()
-    {
-        return FolderDetector.DetectFrom(_settings.LastRootPath) ??
-               FolderDetector.DetectFrom(_settings.LastExplicitOriginalPath);
-    }
-
     private async Task ChooseFolderAsync()
     {
         var dialog = new Microsoft.Win32.OpenFolderDialog
@@ -248,6 +253,13 @@ internal sealed class AppController : IDisposable
         _settings.LastRootPath = folder.RootPath;
         SettingsStore.Save(_settings);
         await SendAsync("folder", FolderPayload(folder));
+        await SendAsync("chartTarget", new
+        {
+            target = _settings.ChartTarget,
+            folder = folder.RootPath,
+            stableRoot = StableGameRoot ?? "",
+            prereleaseRoot = PrereleaseGameRoot ?? ""
+        });
         await RefreshDashboardAsync();
         await SendAsync("toast", new
         {
@@ -284,6 +296,116 @@ internal sealed class AppController : IDisposable
 
         SettingsStore.Save(_settings);
         await SendSettingsAsync();
+    }
+
+    private async Task SaveChartTargetAsync(JsonElement payload)
+    {
+        var target = GetString(payload, "target");
+        if (target.Length > 0)
+        {
+            _settings.ChartTarget = target is "prerelease" or "both" ? target : "stable";
+        }
+        var folder = ResolveChartFolder();
+        if (folder is not null)
+        {
+            _folder = folder;
+            _settings.LastRootPath = folder.RootPath;
+            SettingsStore.Save(_settings);
+            await RefreshDashboardAsync();
+            await LoadCatalogAfterFolderChangeAsync();
+        }
+        else
+        {
+            await SendAsync("folder", FolderPayload(null));
+        }
+        await SendAsync("chartTarget", new
+        {
+            target = _settings.ChartTarget,
+            folder = folder?.RootPath ?? "",
+            stableRoot = StableGameRoot ?? "",
+            prereleaseRoot = PrereleaseGameRoot ?? ""
+        });
+        await SendGameStatusAsync();
+    }
+
+    private async Task ChooseChartFolderAsync(JsonElement payload)
+    {
+        var channel = GetString(payload, "channel");
+        var dialog = new Microsoft.Win32.OpenFolderDialog
+        {
+            Title = channel.Equals("prerelease", StringComparison.OrdinalIgnoreCase)
+                ? "选择测试版游戏目录"
+                : "选择稳定版游戏目录",
+            Multiselect = false,
+            InitialDirectory = CurrentGameRoot ??
+                               Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory)
+        };
+        if (dialog.ShowDialog(_window) != true)
+        {
+            return;
+        }
+
+        var selected = Path.GetFullPath(dialog.FolderName);
+        var exe = Directory.GetFiles(selected, "MajdataPlay.exe", SearchOption.AllDirectories)
+            .FirstOrDefault();
+        if (exe is not null)
+        {
+            selected = Path.GetDirectoryName(exe)!;
+        }
+        var prerelease = channel.Equals("prerelease", StringComparison.OrdinalIgnoreCase);
+        StoreChannelRoot(prerelease, selected, activateChannel: false);
+        await SaveChartTargetAsync(JsonSerializer.SerializeToElement(new
+        {
+            target = _settings.ChartTarget
+        }));
+    }
+
+    private FolderInfo? ResolveChartFolder()
+    {
+        var stable = StableGameRoot is { } stableRoot
+            ? FolderDetector.DetectFrom(stableRoot)
+            : null;
+        var prerelease = PrereleaseGameRoot is { } preRoot
+            ? FolderDetector.DetectFrom(preRoot)
+            : null;
+        if (_settings.ChartTarget == "both")
+        {
+            return stable ?? prerelease ??
+                   FolderDetector.DetectFrom(_settings.LastRootPath);
+        }
+
+        var preferred = _settings.ChartTarget switch
+        {
+            "prerelease" => prerelease,
+            _ => stable
+        };
+        if (preferred is not null)
+        {
+            return preferred;
+        }
+
+        return FolderDetector.DetectFrom(_settings.LastRootPath) ??
+               FolderDetector.DetectFrom(_settings.LastExplicitOriginalPath);
+    }
+
+    private FolderInfo? ResolveSecondaryChartFolder(FolderInfo primary)
+    {
+        if (_settings.ChartTarget != "both")
+        {
+            return null;
+        }
+
+        var stable = StableGameRoot is { } stableRoot
+            ? FolderDetector.DetectFrom(stableRoot)
+            : null;
+        var prerelease = PrereleaseGameRoot is { } preRoot
+            ? FolderDetector.DetectFrom(preRoot)
+            : null;
+        return primary.RootPath.Equals(
+                   stable?.RootPath,
+                   StringComparison.OrdinalIgnoreCase)
+            ? prerelease
+            : stable;
     }
 
     private async Task EnableAutoCheckAsync()
@@ -400,6 +522,7 @@ internal sealed class AppController : IDisposable
 
     private void StoreChannelRoot(bool prerelease, string root, bool activateChannel = true)
     {
+        Directory.CreateDirectory(Path.Combine(root, "MaiCharts", "Original"));
         if (prerelease)
         {
             _settings.PrereleaseGameRootPath = root;
@@ -414,11 +537,12 @@ internal sealed class AppController : IDisposable
             _settings.GameChannel = prerelease ? "prerelease" : "stable";
         }
         SettingsStore.Save(_settings);
+        _folder = ResolveChartFolder();
     }
 
     private async Task ChooseGameFolderAsync()
     {
-        var prerelease = CurrentChannelIsPrerelease;
+        var prerelease = _settings.ChartTarget == "prerelease";
         var dialog = new Microsoft.Win32.OpenFolderDialog
         {
             Title = prerelease ? "选择测试版游戏目录" : "选择稳定版游戏目录",
@@ -440,6 +564,13 @@ internal sealed class AppController : IDisposable
         }
 
         StoreChannelRoot(prerelease, selected);
+        await SendAsync("chartTarget", new
+        {
+            target = _settings.ChartTarget,
+            folder = ResolveChartFolder()?.RootPath ?? "",
+            stableRoot = StableGameRoot ?? "",
+            prereleaseRoot = PrereleaseGameRoot ?? ""
+        });
         var detectedFolder = FolderDetector.DetectFrom(selected);
         if (detectedFolder is not null)
         {
@@ -484,6 +615,13 @@ internal sealed class AppController : IDisposable
         }
 
         StoreChannelRoot(prerelease, selected);
+        await SendAsync("chartTarget", new
+        {
+            target = _settings.ChartTarget,
+            folder = ResolveChartFolder()?.RootPath ?? "",
+            stableRoot = StableGameRoot ?? "",
+            prereleaseRoot = PrereleaseGameRoot ?? ""
+        });
         await SendGameStatusAsync();
         await SendAsync("toast", new
         {
@@ -1479,6 +1617,16 @@ internal sealed class AppController : IDisposable
             });
 
             var installer = new ChartInstaller(_api);
+            var secondaryFolder = _settings.ChartTarget == "both"
+                ? ResolveSecondaryChartFolder(_folder)
+                : null;
+            var secondaryStore = secondaryFolder is null
+                ? null
+                : new InventoryStore(secondaryFolder.RootPath);
+            var secondaryInventory = secondaryStore is null
+                ? null
+                : await secondaryStore.LoadAsync(_operation!.Token);
+            var secondaryLock = new SemaphoreSlim(1, 1);
             var successful = 0;
             var failed = 0;
             var skipped = 0;
@@ -1557,6 +1705,47 @@ internal sealed class AppController : IDisposable
                         record.Folder = Path.GetRelativePath(
                             _folder.RootPath,
                             OnlineCacheWriter.CacheFolder(_folder, chart.Hash));
+                    }
+
+                    if (secondaryFolder is not null &&
+                        secondaryInventory is not null &&
+                        secondaryStore is not null)
+                    {
+                        await SendAsync("task", new
+                        {
+                            id = chart.Id,
+                            state = "downloading",
+                            title = chart.Title,
+                            subtitle = "正在同步到另一个游戏版本",
+                            progress = 1.0
+                        });
+                        var primaryFolder = _folder;
+                        var sourceFolder = primaryFolder is null
+                            ? ""
+                            : request.StorageTarget == "cache"
+                                ? OnlineCacheWriter.CacheFolder(primaryFolder, chart.Hash)
+                                : Path.Combine(primaryFolder.RootPath, record.Folder);
+                        if (Directory.Exists(sourceFolder))
+                        {
+                            var secondaryRecord = await OnlineCacheWriter.CopyToFolderAsync(
+                                secondaryFolder,
+                                chart,
+                                sourceFolder,
+                                _operation.Token);
+                            await secondaryLock.WaitAsync(_operation.Token);
+                            try
+                            {
+                                secondaryInventory.Charts[chart.Id] = secondaryRecord;
+                                secondaryInventory.LastSyncAt = DateTimeOffset.Now;
+                                await secondaryStore.SaveAsync(
+                                    secondaryInventory,
+                                    _operation.Token);
+                            }
+                            finally
+                            {
+                                secondaryLock.Release();
+                            }
+                        }
                     }
 
                     await inventoryLock.WaitAsync(_operation.Token);
@@ -2231,7 +2420,7 @@ internal sealed class AppController : IDisposable
         return SendAsync("state", new AppStatus
         {
             OperationRunning = _operationRunning,
-            Version = "1.10.0",
+            Version = "1.11.0",
             Site = ChartApi.SiteUrl
         });
     }

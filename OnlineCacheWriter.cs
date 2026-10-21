@@ -14,6 +14,29 @@ internal static class OnlineCacheWriter
         return Path.Combine(CacheRoot(root), HexFolderName(bytes));
     }
 
+    public static async Task<SyncRecord> CopyToFolderAsync(
+        FolderInfo destination,
+        ChartItem chart,
+        string sourceFolder,
+        CancellationToken cancellationToken)
+    {
+        var targetFolder = Path.Combine(
+            destination.RootPath,
+            Path.GetFileName(Path.TrimEndingDirectorySeparator(sourceFolder)));
+        Directory.CreateDirectory(targetFolder);
+        foreach (var file in Directory.EnumerateFiles(sourceFolder))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            File.Copy(
+                file,
+                Path.Combine(targetFolder, Path.GetFileName(file)),
+                overwrite: true);
+        }
+
+        await PublishAsync(destination, chart, targetFolder, cancellationToken);
+        return CreateRecord(chart, destination, targetFolder);
+    }
+
     public static string HexFolderName(byte[] bytes) =>
         string.Join("-", bytes.Select(value => value.ToString("X2")));
 

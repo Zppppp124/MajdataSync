@@ -125,8 +125,8 @@ internal static class Program
                 "Changing the endpoint should preserve login fields");
             var stableRootPath = Path.Combine(testRoot, "StableGame");
             var prereleaseRootPath = Path.Combine(testRoot, "PrereleaseGame");
-            Directory.CreateDirectory(stableRootPath);
-            Directory.CreateDirectory(prereleaseRootPath);
+            Directory.CreateDirectory(Path.Combine(stableRootPath, "MaiCharts", "Original"));
+            Directory.CreateDirectory(Path.Combine(prereleaseRootPath, "MaiCharts", "Original"));
             var channelSettings = new AppSettings
             {
                 StableGameRootPath = stableRootPath,
@@ -136,6 +136,58 @@ internal static class Program
             Assert(channelSettings.StableGameRootPath == stableRootPath &&
                    channelSettings.PrereleaseGameRootPath == prereleaseRootPath,
                 "Stable and prerelease install roots should be stored independently");
+
+            var coexistenceStable = FolderDetector.DetectFrom(stableRootPath);
+            var coexistencePrerelease = FolderDetector.DetectFrom(prereleaseRootPath);
+            Assert(coexistenceStable is not null && coexistencePrerelease is not null,
+                "Both channel roots should expose Original folders for coexistence mode");
+            var coexistenceChartFolder = Path.Combine(coexistenceStable!.RootPath, "Coexist Song");
+            Directory.CreateDirectory(coexistenceChartFolder);
+            File.WriteAllText(Path.Combine(coexistenceChartFolder, "maidata.txt"), "&title=Coexist Song");
+            File.WriteAllText(Path.Combine(coexistenceChartFolder, "track.mp3"), "audio");
+            File.WriteAllText(Path.Combine(coexistenceChartFolder, "bg.jpg"), "image");
+            var coexistChart = new ChartItem
+            {
+                Id = "coexist-chart",
+                Title = "Coexist Song",
+                Hash = "AQIDBA=="
+            };
+            var copiedRecord = await OnlineCacheWriter.CopyToFolderAsync(
+                coexistencePrerelease!,
+                coexistChart,
+                coexistenceChartFolder,
+                CancellationToken.None);
+            Assert(Directory.Exists(Path.Combine(
+                       coexistencePrerelease!.RootPath,
+                       Path.GetFileName(coexistenceChartFolder))),
+                "Coexistence mode should copy files to the second game channel");
+            Assert(Directory.Exists(OnlineCacheWriter.CacheFolder(
+                       coexistencePrerelease,
+                       coexistChart.Hash)),
+                "Coexistence mode should write cache into the second game channel");
+            Assert(copiedRecord.ChartId == coexistChart.Id,
+                "Coexistence copy should return a persisted inventory record");
+
+            var coexistSettings = new AppSettings
+            {
+                StableGameRootPath = stableRootPath,
+                PrereleaseGameRootPath = prereleaseRootPath,
+                ChartTarget = "both"
+            };
+            var selectedPrimary = coexistenceStable;
+            var selectedSecondary = coexistencePrerelease;
+            Assert(coexistSettings.ChartTarget == "both" &&
+                   selectedPrimary!.RootPath.Contains("StableGame", StringComparison.Ordinal) &&
+                   selectedSecondary!.RootPath.Contains("PrereleaseGame", StringComparison.Ordinal),
+                "Coexistence should prefer stable first and copy to prerelease when both exist");
+
+            var singleChannelSettings = new AppSettings
+            {
+                StableGameRootPath = stableRootPath,
+                ChartTarget = "both"
+            };
+            Assert(singleChannelSettings.PrereleaseGameRootPath is null,
+                "Coexistence with one channel should leave no secondary copy target");
             var candidateUrls = GitHubAcceleratedDownloader.CandidateUrls(
                 "https://github.com/TeamMajdata/MajdataPlay_Build/archive/refs/tags/LATEST.zip");
             Assert(candidateUrls.Count == 4, "GitHub acceleration should test three mirrors plus direct");

@@ -66,6 +66,7 @@
     downloadMode: 'auto',
     useMirrors: true,
     storageTarget: 'both',
+    chartTarget: 'stable',
     busy: false,
     indexing: false,
     tasks: new Map(),
@@ -134,6 +135,8 @@
       post('loadGameSettings');
     } else if (view === 'skins') {
       post('loadSkins');
+    } else if (view === 'library') {
+      post('gameStatus');
     }
   }
 
@@ -146,8 +149,8 @@
     $('#connectionText').textContent = ready ? '目录已连接' : '本地目录待识别';
     $('#connectionPill .status-dot').classList.toggle('ok', ready);
     $('#statLocal').textContent = ready ? formatNumber(folder.folderCount) : '—';
-    if (!ready) {
-      openModal('tourModal');
+    if (!$('#chartTarget').value) {
+      $('#chartTarget').value = state.chartTarget;
     }
   }
 
@@ -1048,6 +1051,28 @@
       };
       showToast('存放目标：' + labels[state.storageTarget], 'success');
     });
+    $('#chartTarget').addEventListener('change', () => {
+      state.chartTarget = $('#chartTarget').value;
+      post('saveChartTarget', { target: state.chartTarget });
+      const labels = {
+        stable: '置于稳定版',
+        prerelease: '置于测试版',
+        both: '共存（两版）'
+      };
+      showToast('曲目下载位置：' + labels[state.chartTarget], 'success');
+      if (state.chartTarget === 'prerelease' && !state.gameStatus?.prereleaseRoot) {
+        post('chooseChartFolder', { channel: 'prerelease' });
+      } else if (state.chartTarget !== 'prerelease' && !state.gameStatus?.stableRoot) {
+        post('chooseChartFolder', { channel: 'stable' });
+      }
+    });
+    $('#chooseChartFolder').addEventListener('click', () => {
+      const target = $('#chartTarget').value === 'prerelease' &&
+                     !state.gameStatus?.prereleaseRoot
+        ? 'prerelease'
+        : 'stable';
+      post('chooseChartFolder', { channel: target });
+    });
     $('#settingsStorageTarget').addEventListener('change', () => {
       state.storageTarget = $('#settingsStorageTarget').value;
       $('#storageTarget').value = state.storageTarget;
@@ -1361,6 +1386,13 @@
       switch (type) {
         case 'folder':
           updateFolder(payload);
+          break;
+        case 'chartTarget':
+          state.chartTarget = payload.target || 'stable';
+          $('#chartTarget').value = state.chartTarget;
+          if (payload.folder) {
+            $('#connectionText').textContent = '曲目目标已连接';
+          }
           break;
         case 'settings':
           state.concurrency = payload.concurrency || 6;

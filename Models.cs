@@ -57,6 +57,7 @@ internal sealed class AppSettings
     public string GameDownloadSource { get; set; } = "github";
     public string GameDownloadRoute { get; set; } = "fast";
     public string GameChannel { get; set; } = "stable";
+    public string ChartTarget { get; set; } = "stable";
     public string? GameRootPath { get; set; }
     public string? StableGameRootPath { get; set; }
     public string? PrereleaseGameRootPath { get; set; }

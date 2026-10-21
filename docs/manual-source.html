@@ -138,7 +138,7 @@
     <aside>
       <div class="brand">
         <img src="{{SALT_AVATAR}}" alt="盐">
-        <div><strong>MAJDATA SYNC</strong><span>使用说明书 · v1.10.0</span></div>
+        <div><strong>MAJDATA SYNC</strong><span>使用说明书 · v1.11.0</span></div>
       </div>
       <nav>
         <a href="#start">快速开始</a>
@@ -160,7 +160,7 @@
             <h1>给喜欢的谱面，点一个大大的赞吧</h1>
             <p>从 majdata.net 找谱面，勾选后批量下载；每完成一首就立即入库，中断也不白下。</p>
           </div>
-          <span class="version">v1.10.0 · Windows x64</span>
+          <span class="version">v1.11.0 · Windows x64</span>
         </div>
         <div class="quick-actions">
           <a class="button" href="https://github.com/Zppppp124/MajdataSync/releases/latest">下载最新版本</a>
@@ -182,6 +182,14 @@
       <section id="library">
         <h2>曲目库：勾选、下载、更新</h2>
         <img class="figure" src="{{LIBRARY}}" alt="曲目库勾选与批量的示意图">
+        <h3>曲目放在哪个版本</h3>
+        <p>顶部“曲目目标”有三个选项：</p>
+        <div class="cards">
+          <div class="card"><strong>置于稳定版</strong><span>只下载并缓存到稳定版游戏目录。</span></div>
+          <div class="card"><strong>置于测试版</strong><span>只下载并缓存到测试版游戏目录。</span></div>
+          <div class="card"><strong>共存（两版）</strong><span>先检测稳定版，再检测测试版；两套都存在时下载一次并复制文件和缓存。</span></div>
+          <div class="card"><strong>只检测到一个版本</strong><span>共存模式只写入存在的那一套目录，不做第二份复制。</span></div>
+        </div>
         <h3>三种下载方式</h3>
         <div class="cards">
           <div class="card"><strong>同步新谱面</strong><span>只选尚未下载，或站点哈希已经变化的新版本。</span></div>
@@ -293,7 +301,7 @@
       </section>
 
       <footer>
-        Majdata Sync 使用说明书 · v1.10.0 · 离线单文件版本<br>
+        Majdata Sync 使用说明书 · v1.11.0 · 离线单文件版本<br>
         谱面数据来自 majdata.net，游戏与构建包来自 TeamMajdata 官方仓库。
       </footer>
     </main>
