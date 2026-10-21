@@ -51,6 +51,9 @@
     catalogMeta: { total: 0, filtered: 0, downloaded: 0, newCount: 0, page: 0, pageCount: 1, pageSize: 24 },
     statusFilter: 'all',
     search: '',
+    difficulty: 'all',
+    level: 'all',
+    difficultyFilters: [],
     selectedCharts: new Set(),
     gameStatus: null,
     gameSettings: null,
@@ -162,8 +165,65 @@
       search: state.search || null,
       status: state.statusFilter,
       dateFrom: state.dateFrom || null,
-      dateTo: state.dateTo || null
+      dateTo: state.dateTo || null,
+      difficulty: state.difficulty || 'all',
+      level: state.level || 'all'
     });
+  }
+
+  function renderDifficultyFilters(filters) {
+    if (!Array.isArray(filters) || filters.length === 0) return;
+    state.difficultyFilters = filters;
+    const difficulty = $('#difficultyFilter');
+    const selectedDifficulty = state.difficulty || 'all';
+    const labels = {
+      bas: 'BASIC',
+      adv: 'ADVANCED',
+      exp: 'EXPERT',
+      mst: 'MASTER',
+      remaster: 'RE:MASTER',
+      other: '其他难度',
+      all: '全部难度'
+    };
+    difficulty.innerHTML = ['all', 'bas', 'adv', 'exp', 'mst', 'remaster', 'other']
+      .map(key => {
+        const item = filters.find(filter => filter.key === key);
+        if (!item && key !== 'all') return '';
+        return `<option value="${key}">${escapeHtml(labels[key])}${
+          item?.count ? ` · ${formatNumber(item.count)}` : ''
+        }</option>`;
+      }).join('');
+    difficulty.value = filters.some(filter => filter.key === selectedDifficulty)
+      ? selectedDifficulty
+      : 'all';
+    state.difficulty = difficulty.value;
+    renderLevelFilters();
+  }
+
+  function renderLevelFilters() {
+    const level = $('#levelFilter');
+    const selected = state.level || 'all';
+    const difficulty = state.difficulty || 'all';
+    const item = state.difficultyFilters.find(filter => filter.key === difficulty);
+    const levels = item?.levels || [];
+    level.innerHTML = [
+      `<option value="all">全部等级</option>`,
+      ...levels.map(value =>
+        `<option value="${escapeHtml(value)}">${escapeHtml(value)}</option>`),
+      difficulty !== 'all' && difficulty !== 'other'
+        ? `<option value="other">非数字 / 特殊标记</option>`
+        : ''
+    ].join('');
+    level.value = levels.includes(selected) || (selected === 'other' && difficulty !== 'all' && difficulty !== 'other')
+      ? selected
+      : 'all';
+    state.level = level.value;
+    level.disabled = difficulty === 'all' || difficulty === 'other';
+    level.title = difficulty === 'other'
+      ? '其他难度没有可排序的数字等级'
+      : difficulty === 'all'
+        ? '选择具体难度后可继续筛选等级'
+        : '按数字等级筛选';
   }
 
   function renderCatalog() {
@@ -311,15 +371,33 @@
     $('#gameFolderPath').textContent = payload.gameRoot || '当前版本目录未设置';
     $('#gameChannel').value = channel;
     $('#gameChannelHint').textContent = channel === 'prerelease'
-      ? '测试版从 MajdataPlay 的 nightly 包更新，下载会自动续传到完成。'
-      : '稳定版固定从 MajdataPlay_Build 获取，下载会自动续传到完成。';
-    const route = ['fast', 'proxy', 'mirror', 'auto'].includes(payload.downloadRoute)
+      ? '测试版使用 Fast 加速下载 nightly 完整 ZIP，解压完成后自动删除压缩包。'
+      : '稳定版使用 MajdataHub 同款 CNB 逐文件并发下载，已完成文件不会重下。';
+    const route = ['fast', 'cnb', 'proxy', 'mirror', 'auto'].includes(payload.downloadRoute)
       ? payload.downloadRoute
       : 'fast';
     $('#gameRoute').value = route;
+    const cnbOption = $('#gameRoute').querySelector('option[value="cnb"]');
+    if (cnbOption) {
+      cnbOption.disabled = channel === 'prerelease';
+      cnbOption.textContent = channel === 'prerelease'
+        ? 'CNB（稳定版线路）'
+        : 'CNB（MajdataHub 同款）';
+    }
+    ['fast', 'proxy', 'mirror', 'auto'].forEach((value) => {
+      const option = $(`#gameRoute option[value="${value}"]`);
+      if (option) option.disabled = channel === 'stable';
+    });
+    if (channel === 'stable') {
+      $('#gameRoute').value = 'cnb';
+    }
     $('#gameRouteHint').textContent = route === 'auto'
       ? '下载前自动测速；选择延迟与实际吞吐表现更好的线路。'
-      : `优先使用 ${route === 'fast' ? 'Fast' : route === 'proxy' ? 'Proxy' : 'Mirror'}；持续无进度时自动回退。`;
+      : route === 'cnb'
+        ? '稳定版固定使用 MajdataHub 同款 CNB 逐文件线路；测试版仍使用 Fast 加速。'
+        : channel === 'prerelease'
+          ? '测试版使用 Fast 加速，默认 ghfast.top，波动时优先重连当前线路。'
+          : '稳定版固定使用 MajdataHub 同款 CNB 逐文件线路；测试版使用 Fast 加速。';
     const stableInstalled = !!payload.stableInstalled;
     const prereleaseInstalled = !!payload.prereleaseInstalled;
     const currentInstalled = channel === 'prerelease' ? prereleaseInstalled : stableInstalled;
@@ -844,6 +922,8 @@
       dateFrom: extra.dateFrom || state.dateFrom || null,
       dateTo: extra.dateTo || state.dateTo || null,
       search: state.search || null,
+      difficulty: state.difficulty || 'all',
+      level: state.level || 'all',
       limit: extra.limit || null,
       includeVideo: $('#includeVideo').checked,
       concurrency: Number($('#concurrencyRange').value || 6),
@@ -993,6 +1073,9 @@
     $('#filterButton').addEventListener('click', () => $('#filterDrawer').classList.toggle('open'));
     $('#clearFilters').addEventListener('click', () => {
       setDateFields('', '');
+      state.difficulty = 'all';
+      state.level = 'all';
+      renderDifficultyFilters(state.difficultyFilters);
       $('#filterDrawer').classList.remove('open');
       requestCatalogPage(0);
     });
@@ -1087,6 +1170,16 @@
       state.search = event.target.value;
       clearTimeout(searchTimer);
       searchTimer = setTimeout(() => requestCatalogPage(0), 240);
+    });
+    $('#difficultyFilter').addEventListener('change', (event) => {
+      state.difficulty = event.target.value;
+      state.level = 'all';
+      renderLevelFilters();
+      requestCatalogPage(0);
+    });
+    $('#levelFilter').addEventListener('change', (event) => {
+      state.level = event.target.value;
+      requestCatalogPage(0);
     });
     document.addEventListener('keydown', (event) => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
@@ -1221,17 +1314,39 @@
     $('#gameRoute').addEventListener('change', () => {
       const route = $('#gameRoute').value;
       post('saveGameSource', { route });
-      const label = route === 'fast' ? 'Fast'
+      const label = route === 'fast' ? 'Fast（默认）'
+        : route === 'cnb' ? 'CNB'
         : route === 'proxy' ? 'Proxy'
         : route === 'mirror' ? 'Mirror'
         : '自动测速';
       $('#gameRouteHint').textContent = route === 'auto'
         ? '下载前自动测速；选择延迟与实际吞吐表现更好的线路。'
-        : `优先使用 ${label}；持续无进度时自动回退。`;
+        : route === 'cnb'
+          ? '稳定版固定使用 MajdataHub 同款 CNB 线路；测试版仍使用 Fast 加速。'
+          : channel === 'prerelease'
+            ? '测试版使用 Fast 加速，默认 ghfast.top；波动时优先重连当前线路。'
+            : '稳定版固定使用 MajdataHub 同款 CNB 线路。';
       showToast(`游戏下载线路已切换为 ${label}`, 'success');
     });
     $('#gameChannel').addEventListener('change', () => {
       const channel = $('#gameChannel').value;
+    const cnbOption = $('#gameRoute').querySelector('option[value="cnb"]');
+    if (cnbOption) {
+      const isPrerelease = channel === 'prerelease';
+      cnbOption.disabled = isPrerelease;
+      cnbOption.textContent = isPrerelease ? 'CNB（稳定版线路）' : 'CNB（MajdataHub 同款）';
+      ['fast', 'proxy', 'mirror', 'auto'].forEach((value) => {
+        const option = $(`#gameRoute option[value="${value}"]`);
+        if (option) option.disabled = !isPrerelease;
+      });
+      if (isPrerelease && $('#gameRoute').value === 'cnb') {
+        $('#gameRoute').value = 'fast';
+        post('saveGameSource', { route: 'fast' });
+      }
+      if (!isPrerelease) {
+        $('#gameRoute').value = 'cnb';
+      }
+    }
       const current = state.gameStatus?.channel || 'stable';
       if (channel === current) return;
       const label = channel === 'prerelease' ? '测试版' : '稳定版';
@@ -1473,6 +1588,7 @@
             pageCount: payload.pageCount || 1,
             pageSize: payload.pageSize || 24
           };
+          renderDifficultyFilters(payload.difficulties || []);
           $('#indexTime').textContent = payload.indexedAt
             ? `索引更新于 ${new Date(payload.indexedAt).toLocaleString('zh-CN')}`
             : '';

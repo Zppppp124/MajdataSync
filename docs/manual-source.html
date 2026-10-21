@@ -82,6 +82,7 @@
     p { margin: 9px 0; }
     .lead { color: #7394a5; font-size: 15px; }
     .figure { display: block; width: 100%; height: auto; margin: 18px 0; border: 1px solid #dcecf3; border-radius: 14px; background: #fbfdff; }
+    .figure.window { border-radius: 12px; box-shadow: 0 10px 28px rgba(63, 126, 154, .12); }
     .steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 18px 0; }
     .step { padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: #f8fcff; }
     .step b { display: inline-grid; width: 25px; height: 25px; margin-bottom: 8px; place-items: center; border-radius: 50%; background: var(--blue-soft); color: #3e9fbd; }
@@ -116,6 +117,12 @@
     @media (max-width: 540px) {
       html, body { overflow-x: hidden; }
       .shell, main, section, .hero { min-width: 0; max-width: 100%; }
+      main { padding-left: 12px; padding-right: 12px; }
+      section { padding: 17px; }
+      .hero-copy { padding: 18px; }
+      .quick-actions { padding: 0 18px 18px; }
+      .figure, .window { max-width: 100%; }
+      p, li, td { hyphens: auto; }
       .brand { margin-bottom: 16px; }
       nav { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .hero-copy { display: block; }
@@ -138,7 +145,7 @@
     <aside>
       <div class="brand">
         <img src="{{SALT_AVATAR}}" alt="盐">
-        <div><strong>MAJDATA SYNC</strong><span>使用说明书 · v1.11.0</span></div>
+        <div><strong>MAJDATA SYNC</strong><span>使用说明书 · v1.12.0</span></div>
       </div>
       <nav>
         <a href="#start">快速开始</a>
@@ -146,6 +153,7 @@
         <a href="#game">游戏管理</a>
         <a href="#network">网络与续传</a>
         <a href="#cache">缓存与皮肤</a>
+        <a href="#tasks">下载队列</a>
         <a href="#settings">高级设置</a>
         <a href="#files">文件与日志</a>
         <a href="#faq">常见问题</a>
@@ -154,13 +162,13 @@
     </aside>
     <main>
       <div class="hero">
-        <img src="{{HERO}}" alt="Majdata Sync 曲目库示意图">
+        <img class="window" src="{{LIBRARY}}" alt="Majdata Sync 1.12.0 曲目库主界面">
         <div class="hero-copy">
           <div>
             <h1>给喜欢的谱面，点一个大大的赞吧</h1>
             <p>从 majdata.net 找谱面，勾选后批量下载；每完成一首就立即入库，中断也不白下。</p>
           </div>
-          <span class="version">v1.11.0 · Windows x64</span>
+          <span class="version">v1.12.0 · Windows x64</span>
         </div>
         <div class="quick-actions">
           <a class="button" href="https://github.com/Zppppp124/MajdataSync/releases/latest">下载最新版本</a>
@@ -180,8 +188,11 @@
       </section>
 
       <section id="library">
-        <h2>曲目库：勾选、下载、更新</h2>
-        <img class="figure" src="{{LIBRARY}}" alt="曲目库勾选与批量的示意图">
+        <h2>曲目库：搜索、难度筛选、勾选与下载</h2>
+        <img class="figure window" src="{{FILTERS}}" alt="曲目库搜索、难度分类、等级筛选和曲目卡片实拍">
+        <h3>搜索与难度筛选</h3>
+        <p>搜索框支持曲名、曲师、谱师、上传者和标签。右侧难度下拉可以选择 BASIC、ADVANCED、EXPERT、MASTER、RE:MASTER 和其他难度；选定分类后，第二级下拉会按数字顺序列出对应等级，例如 <code>0、1、1+、1?、2、13+、14+</code>。</p>
+        <p>带小数、<code>+</code>、<code>?</code> 的等级仍保留原值；“宴、藏、狂”等不是标准数字等级的标记会被归入“其他难度”。难度、等级、搜索词、日期和入库状态可以组合筛选。</p>
         <h3>曲目放在哪个版本</h3>
         <p>顶部“曲目目标”有三个选项：</p>
         <div class="cards">
@@ -204,12 +215,12 @@
 
       <section id="game">
         <h2>游戏管理：稳定版与测试版</h2>
-        <img class="figure" src="{{GAME}}" alt="游戏管理与版本切换示意图">
+        <img class="figure window" src="{{GAME}}" alt="游戏管理页实拍：版本、线路、完整包、版本检查与启动方式">
         <table>
           <thead><tr><th>通道</th><th>来源</th><th>更新方式</th></tr></thead>
           <tbody>
-            <tr><td>稳定版</td><td>TeamMajdata/MajdataPlay_Build</td><td>逐文件校验、下载和断点续传</td></tr>
-            <tr><td>测试版</td><td>TeamMajdata/MajdataPlay 的 nightly</td><td>完整 nightly 包下载后安全替换程序文件</td></tr>
+            <tr><td>稳定版</td><td>MajdataHub 同款 CNB<br><code>TeamMajdata/MajdataPlay_Build</code></td><td>逐文件并发下载；每个文件独立校验、保留已完成文件、失败后继续补齐</td></tr>
+            <tr><td>测试版</td><td><code>TeamMajdata/MajdataPlay</code> 的 nightly</td><td>Fast 加速下载完整 nightly ZIP；解压后安全替换程序文件并清理</td></tr>
           </tbody>
         </table>
         <p>稳定版和测试版可以分别设置并记住目录。首次下载当前版本时选择的目录会成为该版本默认目录；之后切换版本时，程序会先检查目标版本目录里是否已有游戏。</p>
@@ -221,26 +232,36 @@
         </div>
         <p>切换和更新只作用于当前版本自己的目录，<code>MaiCharts</code>、<code>Skins</code>、<code>Cache</code>、<code>RecordOutputs</code>、<code>Logs</code> 与 <code>settings.json</code> 不会被覆盖。</p>
         <div class="callout warn"><strong>不要在压缩包临时目录运行：</strong>从 WinRAR 等临时目录直接双击时，解压软件可能在下载期间清理目录，窗口会突然消失。请先完整解压，再运行 <code>MajdataSync.exe</code>。</div>
+        <h3>为什么稳定版改成逐文件</h3>
+        <p>MajdataPlay_Build 的 CNB 大 ZIP 使用分块流传输，不支持标准 Range 断点续传。下载到约 300 MB 时如果中间网络层断开，服务端再次请求会从第 0 字节发送整包，看起来就是“重新开始”。</p>
+        <p>1.12.0 改为与 MajdataHub 使用同一个 CNB 仓库，但按仓库清单逐文件下载。已完成文件直接跳过；某个文件中断只补该文件，不再让整个 323 MB 包归零。文件列表来自 CNB 的 <code>smallest_hashes.json</code>，每个文件都按 SHA-256 校验。</p>
+        <div class="callout good"><strong>实测：</strong>完整稳定版共有 1,265 个文件。1.12.0 使用 5 个文件并发，已完整跑通下载、校验和安装，避免单个大 ZIP 在 300 MB 断流后整体重下。</div>
         <h3>启动与编辑</h3>
         <p>启动区可以选择 D3D11、D3D12、OpenGL、Vulkan，或进入测试/谱面编辑模式。没有特殊需要时保持默认即可。</p>
       </section>
 
       <section id="network">
-        <h2>网络与续传：自动完成，不提前放弃</h2>
-        <img class="figure" src="{{NETWORK}}" alt="网络线路锁定与回退示意图">
-        <h3>大型游戏包</h3>
-        <p>游戏管理可选择 Fast、Proxy、Mirror 或自动测速，默认使用 Fast。选中线路后，全部分片都固定使用该线路；短暂中断会等待并继续从已完成字节续传。</p>
-        <div class="callout good"><strong>自动到完整结束：</strong>游戏包下载没有总重试轮数上限。当前线路持续无进度时会换线，其他线路也会继续参与重试；已下载分片始终保留。程序会持续运行，直到游戏包长度正确、校验成功并完成版本切换，或你主动停止。</div>
-        <div class="callout"><strong>谱面下载：</strong>每首曲目成功后立即入库。批量同步中某一首失败，会继续处理其他曲目；再次点击同步只会补齐未完成或需要更新的曲目。</div>
-        <div class="callout warn"><strong>以下情况需要你处理：</strong>取消下载、关闭程序、磁盘空间不足、目标目录没有写入权限，或者安装目录被其他程序占用。修正这些问题后重新开始，会从保留的断点继续。</div>
-        <h3>谱面下载</h3>
-        <p>谱面索引与资源下载会优先测试 Majdata 本站和同源镜像，选择低延迟线路。镜像不可用时会回退主站，并逐曲目校验必需文件。</p>
-        <div class="callout"><strong>断点会保留：</strong>未完成的临时文件保留在目标曲目目录或游戏安装目录的隐藏工作位置。重新开始时会尽量复用已有进度。</div>
-        <div class="callout warn"><strong>镜像不是系统代理：</strong>程序只是把 GitHub 下载地址换成普通 HTTPS 镜像地址，不安装或接管系统代理。能否访问仍取决于本机网络、防火墙和镜像站状态。</div>
+        <h2>网络、线路与下载策略</h2>
+        <img class="figure" src="{{NETWORK}}" alt="线路锁定与自动回退示意图">
+        <h3>稳定版</h3>
+        <p>稳定版固定使用 MajdataHub 同款 CNB 仓库，不受“Fast / Proxy / Mirror”下拉影响。CNB 清单和单文件都直接从 CNB 获取，不使用 GitHub 镜像。界面会显示文件进度而不是单个大 ZIP 进度。</p>
+        <h3>测试版</h3>
+        <p>测试版默认使用 Fast，首选 <code>ghfast.top</code>。下载前不会在短时间反复切换线路；发生一次波动时优先重连当前线路。连续失败后才尝试 <code>gh-proxy.com</code>、GitProxy、GHFile 等候选。完整 nightly ZIP 下载、校验、解压后才替换游戏文件。</p>
+        <table>
+          <thead><tr><th>场景</th><th>默认线路</th><th>失败处理</th></tr></thead>
+          <tbody>
+            <tr><td>稳定版</td><td>CNB 逐文件</td><td>单文件保留并继续补齐，不切换 GitHub 镜像</td></tr>
+            <tr><td>测试版</td><td>Fast / ghfast.top</td><td>优先重连当前线路；连续失败后切换候选</td></tr>
+            <tr><td>谱面资源</td><td>本站与同源镜像</td><td>失败的谱面继续处理其他曲目，再次同步只补缺失项</td></tr>
+          </tbody>
+        </table>
+        <div class="callout"><strong>谱面逐首入库：</strong>每首曲目成功后立即保存同步索引。批量任务中断不会让已经完成的曲目重下。</div>
+        <div class="callout warn"><strong>线路仍取决于本机网络：</strong>程序只替换普通 HTTPS 下载地址，不安装或接管系统代理。公司网络、防火墙、DNS 和站点限流仍可能影响速度。</div>
       </section>
 
       <section id="cache">
         <h2>在线缓存与皮肤</h2>
+        <img class="figure window" src="{{SKINS}}" alt="皮肤页实拍：在线皮肤、已安装皮肤和当前使用状态">
         <h3>本地曲目库与在线缓存</h3>
         <p>顶部“存放位置”可以选：</p>
         <ul>
@@ -255,12 +276,20 @@
 
       <section id="settings">
         <h2>设置与高级设置</h2>
-        <img class="figure" src="{{SETTINGS}}" alt="设置、高级设置与缓存示意图">
+        <img class="figure window" src="{{SETTINGS}}" alt="偏好设置页实拍：目录、并发、CDN 测速与存放目标">
         <h3>常用偏好</h3>
         <p>可以调整并行任务数、是否下载 PV、是否自动检查新谱面、是否启用谱面镜像以及默认存放位置。各项会自动保存。</p>
         <h3>读取 settings.json</h3>
-        <p>进入游戏管理页后读取当前配置。内置编辑器显示常用字段；高级设置会列出未在内置表单出现的字段，并提供中文说明、默认值和有效值，支持搜索。</p>
+        <img class="figure window" src="{{ADVANCED}}" alt="高级设置实拍：设置搜索、读取当前配置和保存高级设置">
+        <p>进入游戏管理页后读取当前配置。内置编辑器显示常用字段；高级设置会列出未在内置表单出现的字段，并提供中文说明、默认值和有效值，支持搜索。页面底部可以“读取当前配置”或“保存高级设置”。</p>
         <div class="callout"><strong>修改前建议：</strong>先关闭游戏。保存高级设置后，重新读取一次配置，确认字段已经写入。</div>
+      </section>
+
+      <section id="tasks">
+        <h2>下载队列</h2>
+        <img class="figure window" src="{{TASKS}}" alt="下载队列页实拍：当前阶段、完成任务、下载速度和结果">
+        <p>开始同步后，队列会显示当前阶段、已完成任务数、速度、结果和每首曲目的实时进度。可在任务进行中停止；已完成的曲目和缓存不会因为停止而丢失。</p>
+        <div class="callout"><strong>建议：</strong>任务进行时不要移动或重命名游戏目录。需要切换游戏版本、安装更新或修改 settings.json 时，先等待当前任务结束或主动停止。</div>
       </section>
 
       <section id="files">
@@ -301,7 +330,7 @@
       </section>
 
       <footer>
-        Majdata Sync 使用说明书 · v1.11.0 · 离线单文件版本<br>
+        Majdata Sync 使用说明书 · v1.12.0 · 离线单文件版本<br>
         谱面数据来自 majdata.net，游戏与构建包来自 TeamMajdata 官方仓库。
       </footer>
     </main>

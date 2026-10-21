@@ -24,40 +24,47 @@ jobs:
           $version = ([xml](Get-Content -LiteralPath .\MajdataSync.csproj)).Project.PropertyGroup.Version
           Compress-Archive -Path .\publish\* -DestinationPath ".\MajdataSync-win-x64-v$version.zip"
           Copy-Item -LiteralPath .\docs\MajdataSync-Manual.html -Destination ".\MajdataSync-Manual.html" -Force
+          Copy-Item -LiteralPath ".\docs\assets\screenshots" -Destination ".\MajdataSync-Screenshots" -Recurse -Force
+          Compress-Archive -Path ".\MajdataSync-Screenshots\*" -DestinationPath ".\MajdataSync-Screenshots.zip"
           Write-Output "RELEASE_ASSET=MajdataSync-win-x64-v$version.zip" >> $env:GITHUB_ENV
       - name: Upload release asset
         uses: softprops/action-gh-release@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          name: Majdata Sync v1.11.0
+          name: Majdata Sync v1.12.0
           body: |
-            ## Majdata Sync v1.11.0
+            ## Majdata Sync v1.12.0
 
             本次发布包含完整的 Windows x64 自包含版本，无需单独安装 .NET。
 
-            ### 主要更新
+            ### 本次重点
 
-            - 曲目卡支持勾选并批量下载所选谱面
-            - 每首曲目下载完成后立即入库，中断后无需重下已完成曲目
-            - 稳定版固定从 MajdataPlay_Build 获取，测试版使用 MajdataPlay nightly
-            - 内嵌 ReleaseFlow 的 GitHub 三路镜像测速与并行下载方案
-            - 稳定版 / 测试版可切换，曲目、皮肤、缓存、成绩输出和设置会保留
-            - 测试版更新改为下载完整 nightly 包后安全替换程序文件
-            - 修复稳定版续传时异常小文件可能中断安装的问题
-            - 测试版完整包测速后锁定最快线路，避免下载中在多个镜像间无意义切换
-            - README 改为图文说明，并新增离线单文件 HTML 使用手册
-            - 增加临时目录启动提示和线路标记持久化
-            - 游戏包下载改为持续自动完成：保留断点、自动换线重试，无总重试轮次上限
-            - 只有主动停止、关闭程序或本机不可恢复错误才会结束下载
-            - 游戏下载线路可选：Fast（默认）、Proxy、Mirror 或自动测速
-            - 稳定版与测试版使用各自独立、可记忆的游戏目录
-            - 目标版本已有游戏时直接切换；缺失时才提示下载完整包
-            - 曲目下载支持置于稳定版、置于测试版或两版共存
-            - 共存模式会检测两套游戏目录；只存在一套时仅写入该版本
+            - **稳定版改为 MajdataHub 同款 CNB 仓库逐文件下载**：使用官方清单与 SHA-256 校验，5 个文件并发。
+            - **解决稳定版约 300 MB 断流重来**：不再依赖单个 323 MB ZIP；已完成的文件会直接跳过。
+            - **曲目搜索增加难度筛选**：BASIC、ADVANCED、EXPERT、MASTER、RE:MASTER、其他难度，并可继续选择数字等级。
+            - **测试版继续使用 Fast 加速**：默认 `ghfast.top`，单次网络波动优先重连当前线路，连续失败后才切换候选。
+            - **每首曲目完成即入库**：批量下载中断后再次同步只补缺失或变化的曲目。
+            - **版本目录独立**：稳定版、测试版可分别记忆目录；切换、更新不会覆盖 `MaiCharts`、`Skins`、`Cache`、成绩、日志和设置。
+            - **图文说明书**：新增 1.12.0 离线 HTML 手册和实拍截图包。
+
+            ### 图文说明
+
+            ![曲目库](https://raw.githubusercontent.com/Zppppp124/MajdataSync/main/docs/assets/screenshots/library.png)
+
+            ![游戏管理](https://raw.githubusercontent.com/Zppppp124/MajdataSync/main/docs/assets/screenshots/game.png)
+
+            ### 附件
+
+            - 主程序：`MajdataSync-win-x64-v1.12.0.zip`
+            - 离线图文说明书：`MajdataSync-Manual.html`
+            - 实拍截图包：`MajdataSync-Screenshots.zip`
+
+            > 稳定版固定使用 CNB 逐文件下载，不会再因单个大 ZIP 在 300 MB 断流而整体重来。
           files: |
             ${{ env.RELEASE_ASSET }}
             MajdataSync-Manual.html
+            MajdataSync-Screenshots.zip
           fail_on_unmatched_files: true
           overwrite_files: true
           generate_release_notes: true

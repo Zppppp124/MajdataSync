@@ -19,10 +19,12 @@ internal static class Program
     {
         try
         {
-            var testRoot = Path.Combine(Path.GetTempPath(), "MajdataSyncTests");
+            var testRoot = Path.Combine(
+                Path.GetTempPath(),
+                "MajdataSyncTests-" + Environment.ProcessId + "-" + Guid.NewGuid().ToString("N"));
             if (Directory.Exists(testRoot))
             {
-                Directory.Delete(testRoot, recursive: true);
+                DeleteTestDirectory(testRoot);
             }
 
             Directory.CreateDirectory(testRoot);
@@ -189,12 +191,27 @@ internal static class Program
             Assert(singleChannelSettings.PrereleaseGameRootPath is null,
                 "Coexistence with one channel should leave no secondary copy target");
             var candidateUrls = GitHubAcceleratedDownloader.CandidateUrls(
-                "https://github.com/TeamMajdata/MajdataPlay_Build/archive/refs/tags/LATEST.zip");
-            Assert(candidateUrls.Count == 4, "GitHub acceleration should test three mirrors plus direct");
-            Assert(candidateUrls[0].StartsWith("https://ghfast.top/https://github.com/", StringComparison.Ordinal),
-                "GitHub acceleration should try the fast mirror first");
+                GameManager.StableArchive);
+            Assert(candidateUrls.Count >= 4, "GitHub acceleration should include its mirrors plus direct");
+            Assert(candidateUrls[0].StartsWith("https://ghfast.top/", StringComparison.Ordinal),
+                "Fast should default to ghfast.top");
+            Assert(candidateUrls[1].StartsWith("https://gh-proxy.com/", StringComparison.Ordinal),
+                "gh-proxy.com should be the first fallback");
+            Assert(candidateUrls.Any(url => url.StartsWith(
+                       "https://api.gitproxy.dev/github.com/",
+                       StringComparison.Ordinal) &&
+                   !url.Contains("https://github.com", StringComparison.Ordinal)),
+                "GitProxy should use its API host and omit the nested protocol");
             Assert(candidateUrls[^1].StartsWith("https://github.com/", StringComparison.Ordinal),
                 "GitHub acceleration should keep a direct fallback");
+            Assert(GameManager.StableArchive.EndsWith(
+                       "/archive/refs/heads/main.zip",
+                       StringComparison.Ordinal),
+                "Stable installation should use the game source ZIP");
+            Assert(GameManager.CnbStableArchive.Equals(
+                       "https://cnb.cool/TeamMajdata/MajdataPlay_Build/-/git/archive/LATEST.zip",
+                       StringComparison.Ordinal),
+                "Stable installation should match MajdataHub's CNB ZIP source");
 
             var selectionCharts = new[]
             {
@@ -211,6 +228,85 @@ internal static class Program
                 Assert(selected.Count == 1 && selected[0].Id == "chart-b",
                     "Batch selection should download only checked charts");
             }
+
+            var difficultyCharts = new[]
+            {
+                new ChartItem
+                {
+                    Id = "difficulty-bas",
+                    Title = "BAS",
+                    Levels = ["7", "", "", "", "", "15", "宴"]
+                },
+                new ChartItem
+                {
+                    Id = "difficulty-master",
+                    Title = "MST",
+                    Levels = ["", "", "", "13+", "14+", "15", ""]
+                },
+                new ChartItem
+                {
+                    Id = "difficulty-remaster",
+                    Title = "ReMaster",
+                    Levels = ["", "", "", "", "13", "13+", "藏"]
+                }
+            };
+            using (var difficultyController = new AppController(null))
+            {
+                var master = difficultyController.SelectChartsForTest(
+                    difficultyCharts,
+                    new SyncInventory(),
+                    new SyncRequest { Difficulty = "mst" });
+                Assert(master.Count == 1 && master[0].Id == "difficulty-master",
+                    "MASTER category should only match its own level slot");
+                var remaster = difficultyController.SelectChartsForTest(
+                    difficultyCharts,
+                    new SyncInventory(),
+                    new SyncRequest { Difficulty = "remaster", Level = "13" });
+                Assert(remaster.Count == 1 && remaster[0].Id == "difficulty-remaster",
+                    "RE:MASTER level filtering should match exact numeric levels");
+                var other = difficultyController.SelectChartsForTest(
+                    difficultyCharts,
+                    new SyncInventory(),
+                    new SyncRequest { Difficulty = "other" });
+                Assert(other.Count == 3,
+                    "Non-numeric difficulty labels should be grouped as other");
+            }
+            Assert(ChartItem.TryParseDifficultyLevel("13+？") == "13+?",
+                "Difficulty levels should normalize full-width question marks");
+            Assert(ChartItem.TryParseDifficultyLevel("宴") is null,
+                "Non-numeric difficulty labels should not become sortable levels");
+
+            var appScript = await File.ReadAllTextAsync(
+                Path.Combine(
+                    Path.GetDirectoryName(typeof(Program).Assembly.Location)!,
+                    "..", "..", "..", "..", "Web", "app.js"));
+            Assert(appScript.Contains(
+                       "if (channel === 'stable') {\n      $('#gameRoute').value = 'cnb';",
+                       StringComparison.Ordinal),
+                "Stable channel should lock the game route to CNB");
+            Assert(appScript.Contains(
+                       "if (isPrerelease && $('#gameRoute').value === 'cnb')",
+                       StringComparison.Ordinal),
+                "Prerelease channel should switch the game route to Fast");
+
+            var packageArtifacts = Path.Combine(testRoot, "PackageArtifacts");
+            Directory.CreateDirectory(packageArtifacts);
+            var packageZip = Path.Combine(packageArtifacts, ".majdata-stable-download.zip");
+            File.WriteAllText(packageZip, "zip");
+            File.WriteAllText(packageZip + ".part", "part");
+            File.WriteAllText(packageZip + ".size", "324");
+            GitHubAcceleratedDownloader.WriteRouteMarker(
+                packageZip,
+                ("GitProxy 加速", "https://api.gitproxy.dev/github.com/example.zip"));
+            for (var index = 0; index < 8; index++)
+            {
+                File.WriteAllText(packageZip + $".segment{index}", "segment");
+            }
+            GameManager.DeleteGamePackageFilesForTest(packageZip);
+            Assert(!Directory.EnumerateFileSystemEntries(
+                       packageArtifacts,
+                       ".majdata-stable-download.zip*").Any(),
+                "Completed game installation should delete ZIP and resumable artifacts");
 
             var persistentOriginal = Path.Combine(testRoot, "PersistentCharts", "Original");
             Directory.CreateDirectory(persistentOriginal);
@@ -291,6 +387,8 @@ internal static class Program
             if (args.Length == 1 &&
                 !args[0].StartsWith("gamestatus:", StringComparison.OrdinalIgnoreCase) &&
                 !args[0].StartsWith("catalogbench:", StringComparison.OrdinalIgnoreCase) &&
+                !args[0].StartsWith("difficultybench:", StringComparison.OrdinalIgnoreCase) &&
+                !args[0].StartsWith("mirrorlimit:", StringComparison.OrdinalIgnoreCase) &&
                 !args[0].StartsWith("resume:", StringComparison.OrdinalIgnoreCase) &&
                 !args[0].StartsWith("route-test:", StringComparison.OrdinalIgnoreCase) &&
                 !args[0].StartsWith("range-retry:", StringComparison.OrdinalIgnoreCase))
@@ -314,6 +412,10 @@ internal static class Program
                         CancellationToken.None);
                     Assert(GameManager.IsInstalled(installTarget), "Installed game should contain MajdataPlay.exe");
                     Assert(reports > 5, "Game install should report download progress");
+            Assert(!Directory.EnumerateFiles(
+                       Path.GetDirectoryName(installTarget)!,
+                       ".majdata-stable-download.zip*").Any(),
+                "Completed stable installation should remove ZIP files");
                     Console.WriteLine($"PASS: game install and progress ({reports} reports)");
                     return 0;
                 }
@@ -339,6 +441,7 @@ internal static class Program
                 !args[0].StartsWith("gamedata:", StringComparison.OrdinalIgnoreCase) &&
                 !args[0].StartsWith("github-download:", StringComparison.OrdinalIgnoreCase) &&
                 !args[0].StartsWith("route-test:", StringComparison.OrdinalIgnoreCase) &&
+                !args[0].StartsWith("mirrorlimit:", StringComparison.OrdinalIgnoreCase) &&
                 !args[0].StartsWith("range-retry:", StringComparison.OrdinalIgnoreCase))
             {
                 var sampleRoot = FolderDetector.DetectFrom(args[0]);
@@ -426,6 +529,56 @@ internal static class Program
                 return 0;
             }
 
+            if (args.Length == 1 &&
+                args[0].StartsWith("difficultybench:", StringComparison.OrdinalIgnoreCase))
+            {
+                var cachePath = args[0]["difficultybench:".Length..];
+                var charts = JsonSerializer.Deserialize<List<ChartItem>>(
+                    await File.ReadAllTextAsync(cachePath),
+                    JsonOptions.Default) ?? [];
+                var filters = AppController.BuildDifficultyFiltersForTest(charts);
+                Console.WriteLine(JsonSerializer.Serialize(filters, JsonOptions.Default));
+                return 0;
+            }
+
+            if (args.Length == 2 &&
+                args[0].StartsWith("mirrorlimit:", StringComparison.OrdinalIgnoreCase))
+            {
+                var prefix = args[0]["mirrorlimit:".Length..];
+                var destination = Path.Combine(
+                    Path.GetTempPath(),
+                    "MajdataSyncMirrorTests",
+                    "limited-" + Guid.NewGuid().ToString("N") + ".zip");
+                Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+                try
+                {
+                    var mirrorUrl = GitHubAcceleratedDownloader.BuildMirrorUrl(
+                        prefix,
+                        GameManager.StableArchive);
+                    var limitMb = long.Parse(
+                        args[1],
+                        System.Globalization.CultureInfo.InvariantCulture);
+                    var reports = new List<(long Bytes, double Seconds)>();
+                    var started = System.Diagnostics.Stopwatch.StartNew();
+                    await DownloadSequentialPrefixAsync(
+                        mirrorUrl,
+                        destination,
+                        limitMb * 1024 * 1024,
+                        report: (bytes, elapsed) => reports.Add((bytes, elapsed)),
+                        CancellationToken.None);
+                    started.Stop();
+                    var info = new FileInfo(destination);
+                    var speed = info.Length / Math.Max(0.001, started.Elapsed.TotalSeconds);
+                    Console.WriteLine(
+                        $"PASS: {prefix} bytes={info.Length} seconds={started.Elapsed.TotalSeconds:F2} speed={speed / 1024 / 1024:F2} MB/s");
+                }
+                finally
+                {
+                    try { File.Delete(destination); } catch { }
+                }
+                return 0;
+            }
+
             if (args.Length == 1 && args[0].StartsWith("resume:", StringComparison.OrdinalIgnoreCase))
             {
                 var root = Path.GetFullPath(args[0]["resume:".Length..]);
@@ -479,11 +632,41 @@ internal static class Program
                 var proxy = GitHubAcceleratedDownloader.DownloadCandidates(sample, "proxy");
                 var auto = GitHubAcceleratedDownloader.DownloadCandidates(sample, "auto");
                 Assert(fast[0].StartsWith("https://ghfast.top/", StringComparison.Ordinal),
-                    "Fast should be the default first route");
+                    "Fast should default to ghfast.top");
                 Assert(proxy[0].StartsWith("https://gh-proxy.com/", StringComparison.Ordinal),
                     "Proxy should be selectable as the first route");
-                Assert(auto.Count == 4,
+                Assert(auto.Count >= 4,
                     "Auto route should retain the full fallback list");
+                var cnb = GitHubAcceleratedDownloader.DownloadCandidates(sample, "cnb");
+                Assert(cnb.Count >= 4 && cnb[0].StartsWith(
+                           "https://ghfast.top/https://github.com/",
+                           StringComparison.Ordinal),
+                    "CNB should not replace GitHub nightly acceleration for prerelease");
+                var gitproxy = GitHubAcceleratedDownloader.DownloadCandidates(
+                    GameManager.StableArchive,
+                    "fast")
+                    .FirstOrDefault(candidate => candidate.Contains(
+                        "api.gitproxy.dev",
+                        StringComparison.Ordinal));
+                Assert(gitproxy is not null &&
+                       gitproxy.Equals(
+                           "https://api.gitproxy.dev/github.com/TeamMajdata/MajdataPlay_Build/archive/refs/heads/main.zip",
+                           StringComparison.Ordinal),
+                    "Fast should include GitProxy with the correct API URL");
+                var cnbStable = GitHubAcceleratedDownloader.DownloadCandidates(
+                    GameManager.CnbStableBase + "MajdataPlay.exe",
+                    "cnb");
+                Assert(cnbStable.Count == 1 &&
+                       cnbStable[0].StartsWith(
+                           "https://cnb.cool/TeamMajdata/MajdataPlay_Build/",
+                           StringComparison.Ordinal),
+                    "CNB stable route should use CNB directly");
+                var stableZipCandidates = GitHubAcceleratedDownloader.DownloadCandidates(
+                    GameManager.CnbStableArchive,
+                    "cnb-stable");
+                Assert(stableZipCandidates.Count == 1 &&
+                       stableZipCandidates[0] == GameManager.CnbStableArchive,
+                    "Stable ZIP should use only the MajdataHub CNB route");
                 Console.WriteLine("PASS: Fast is default; Proxy and Auto route choices are available");
                 return 0;
             }
@@ -636,6 +819,101 @@ internal static class Program
             Console.Error.WriteLine("FAIL: " + ex);
             return 1;
         }
+    }
+
+    private static void DeleteTestDirectory(string root)
+    {
+        var fullRoot = Path.GetFullPath(root);
+        var tempRoot = Path.GetFullPath(Path.GetTempPath());
+        if (!fullRoot.StartsWith(
+                tempRoot + Path.DirectorySeparatorChar,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("Refusing to remove a test directory outside TEMP");
+        }
+
+        foreach (var path in Directory.EnumerateFileSystemEntries(
+                     fullRoot,
+                     "*",
+                     SearchOption.AllDirectories))
+        {
+            try
+            {
+                File.SetAttributes(path, FileAttributes.Normal);
+            }
+            catch (IOException)
+            {
+                // Some stale test artifacts reject even attribute changes.
+            }
+            catch (UnauthorizedAccessException)
+            {
+                // A new isolated directory below is still usable when this one is stale.
+            }
+        }
+        try
+        {
+            Directory.Delete(fullRoot, recursive: true);
+        }
+        catch (IOException)
+        {
+            // Keep the test runnable when Windows retains a stale temp artifact.
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // Keep the test runnable when Windows retains a stale temp artifact.
+        }
+    }
+
+    private static async Task DownloadSequentialPrefixAsync(
+        string url,
+        string destination,
+        long limit,
+        Action<long, double> report,
+        CancellationToken cancellationToken)
+    {
+        using var http = new HttpClient(new SocketsHttpHandler
+        {
+            AutomaticDecompression = System.Net.DecompressionMethods.All,
+            ConnectTimeout = TimeSpan.FromSeconds(12),
+            MaxConnectionsPerServer = 12
+        })
+        {
+            Timeout = Timeout.InfiniteTimeSpan
+        };
+        http.DefaultRequestHeaders.UserAgent.ParseAdd(
+            "Mozilla/5.0 MajdataSync/1.11 mirror benchmark");
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        using var request = new HttpRequestMessage(HttpMethod.Get, url);
+        request.Headers.Range = new System.Net.Http.Headers.RangeHeaderValue(0, limit - 1);
+        using var response = await http.SendAsync(
+            request,
+            HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken);
+        response.EnsureSuccessStatusCode();
+        await using var source = await response.Content.ReadAsStreamAsync(cancellationToken);
+        await using var output = new FileStream(
+            destination,
+            FileMode.Create,
+            FileAccess.Write,
+            FileShare.Read,
+            128 * 1024,
+            FileOptions.Asynchronous);
+        var buffer = new byte[128 * 1024];
+        var remaining = limit;
+        while (remaining > 0)
+        {
+            var read = await source.ReadAsync(
+                buffer.AsMemory(0, (int)Math.Min(buffer.Length, remaining)),
+                cancellationToken);
+            if (read == 0)
+            {
+                break;
+            }
+            await output.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
+            remaining -= read;
+        }
+        watch.Stop();
+        report(new FileInfo(destination).Length, watch.Elapsed.TotalSeconds);
     }
 
     private static void CreateNestedZip(string path)

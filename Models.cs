@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Text.Json.Serialization;
 using System.Text.Json;
 
@@ -28,7 +30,7 @@ internal sealed class ChartItem
     {
         get
         {
-            var labels = new[] { "BAS", "ADV", "EXP", "MST", "RE:MASTER", "?", "?" };
+            var labels = new[] { "BAS", "ADV", "EXP", "MST", "RE:MASTER", "OTHER", "OTHER" };
             var values = Levels
                 .Select((level, index) => string.IsNullOrWhiteSpace(level)
                     ? null
@@ -41,6 +43,88 @@ internal sealed class ChartItem
 
     [JsonIgnore]
     public string ImageUrl => ChartApi.Image(Id, full: false);
+
+    public bool HasDifficulty(string category, string? level)
+    {
+        var categoryIndex = category switch
+        {
+            "bas" => 0,
+            "adv" => 1,
+            "exp" => 2,
+            "mst" => 3,
+            "remaster" => 4,
+            "other" => -1,
+            _ => -2
+        };
+        if (categoryIndex == -2)
+        {
+            return true;
+        }
+
+        var includeOther = string.IsNullOrWhiteSpace(level) ||
+                           level.Equals("all", StringComparison.OrdinalIgnoreCase) ||
+                           level.Equals("other", StringComparison.OrdinalIgnoreCase);
+        for (var index = 0; index < Levels.Count; index++)
+        {
+            var value = Levels[index]?.Trim();
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                continue;
+            }
+
+            var numericLevel = TryParseDifficultyLevel(value);
+            if (index > 4 || numericLevel is null)
+            {
+                if (categoryIndex == -1) return true;
+                continue;
+            }
+
+            if (index != categoryIndex)
+            {
+                continue;
+            }
+
+            if (includeOther)
+            {
+                return true;
+            }
+            if (numericLevel.Equals(
+                    level!.Trim(),
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public static string? TryParseDifficultyLevel(string rawValue)
+    {
+        var value = rawValue.Trim()
+            .Replace('＋', '+')
+            .Replace('？', '?')
+            .Replace('\r', ' ')
+            .Replace('\n', ' ')
+            .Trim();
+        var match = Regex.Match(
+            value,
+            @"(?<![\d.])(?<number>\d+(?:\.\d+)?)(?<plus>\+?)(?<uncertain>\?*)$",
+            RegexOptions.CultureInvariant);
+        if (!match.Success ||
+            !decimal.TryParse(
+                match.Groups["number"].Value,
+                NumberStyles.AllowDecimalPoint,
+                CultureInfo.InvariantCulture,
+                out var number))
+        {
+            return null;
+        }
+
+        return number.ToString("0.############################", CultureInfo.InvariantCulture) +
+               match.Groups["plus"].Value +
+               match.Groups["uncertain"].Value;
+    }
 }
 
 internal sealed class AppSettings
@@ -61,6 +145,7 @@ internal sealed class AppSettings
     public string? GameRootPath { get; set; }
     public string? StableGameRootPath { get; set; }
     public string? PrereleaseGameRootPath { get; set; }
+    public List<string> GameDownloadMirrors { get; set; } = [];
 }
 
 internal sealed class SyncRecord
@@ -104,6 +189,8 @@ internal sealed class SyncRequest
     public string? DateFrom { get; set; }
     public string? DateTo { get; set; }
     public string? Search { get; set; }
+    public string? Difficulty { get; set; }
+    public string? Level { get; set; }
     public int? Limit { get; set; }
     public bool IncludeVideo { get; set; } = true;
     public int Concurrency { get; set; } = 6;
@@ -132,6 +219,8 @@ internal sealed class CatalogQuery
     public string Status { get; set; } = "all";
     public string? DateFrom { get; set; }
     public string? DateTo { get; set; }
+    public string? Difficulty { get; set; }
+    public string? Level { get; set; }
 }
 
 internal sealed class CatalogSnapshot

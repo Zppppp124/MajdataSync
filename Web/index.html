@@ -53,7 +53,7 @@
 
       <div class="sidebar-foot">
         <a href="#" id="siteLink" class="site-link">majdata.net <span data-icon="arrow-up-right"></span></a>
-        <span>本地同步工具 · v1.11.0</span>
+        <span>本地同步工具 · v1.12.0</span>
       </div>
     </aside>
 
@@ -188,6 +188,18 @@
               <input id="searchInput" type="search" placeholder="搜索曲名、曲师、谱师或上传者">
               <kbd>⌘ K</kbd>
             </label>
+            <select class="select-control difficulty-filter" id="difficultyFilter" title="按难度分类筛选" aria-label="按难度分类筛选">
+              <option value="all">全部难度</option>
+              <option value="bas">BASIC</option>
+              <option value="adv">ADVANCED</option>
+              <option value="exp">EXPERT</option>
+              <option value="mst">MASTER</option>
+              <option value="remaster">RE:MASTER</option>
+              <option value="other">其他难度</option>
+            </select>
+            <select class="select-control difficulty-filter level-filter" id="levelFilter" title="按数字等级筛选" aria-label="按数字等级筛选">
+              <option value="all">全部等级</option>
+            </select>
             <div class="segmented" id="statusFilter">
               <button class="active" data-filter="all">全部</button>
               <button data-filter="new">未下载</button>
@@ -315,7 +327,7 @@
             <div class="setting-row">
               <div>
                 <strong>游戏版本</strong>
-                <span id="gameChannelHint">稳定版固定从 MajdataPlay_Build 获取，下载会自动续传到完成。</span>
+                <span id="gameChannelHint">稳定版使用 MajdataHub 同款 CNB 逐文件并发下载；测试版使用 Fast 整包加速。</span>
               </div>
               <select class="select-control" id="gameChannel">
                 <option value="stable">稳定版</option>
@@ -325,10 +337,11 @@
             <div class="setting-row">
               <div>
                 <strong>下载线路</strong>
-                <span id="gameRouteHint">默认优先 Fast；当前线路持续无进度时会自动回退。</span>
+                <span id="gameRouteHint">稳定版固定 CNB，每文件独立续传；测试版 Fast 默认 ghfast.top，波动不换镜像。</span>
               </div>
               <select class="select-control" id="gameRoute">
                 <option value="fast">Fast（默认）</option>
+                <option value="cnb">CNB（MajdataHub 同款）</option>
                 <option value="proxy">Proxy</option>
                 <option value="mirror">Mirror</option>
                 <option value="auto">自动测速</option>

@@ -31,6 +31,8 @@ setting-details.txt
 *.part
 *.tmp
 .majdata-game-download.zip*
+.majdata-stable-download.zip*
+.majdata-prerelease-download.zip*
 .majdata-stable-stage/
 live-game-*/
 

@@ -18,9 +18,17 @@ internal sealed class GameManager
     public const string GithubSkinBase =
         "https://github.com/TeamMajdata/MajdataPlay-Skins/raw/refs/heads/main/";
     public const string StableArchive =
-        "https://github.com/TeamMajdata/MajdataPlay_Build/archive/refs/tags/LATEST.zip";
+        "https://github.com/TeamMajdata/MajdataPlay_Build/archive/refs/heads/main.zip";
+    public const string CnbStableArchive =
+        "https://cnb.cool/TeamMajdata/MajdataPlay_Build/-/git/archive/LATEST.zip";
     public const string StableHashes =
         "https://github.com/TeamMajdata/MajdataPlay_Build/raw/refs/heads/main/smallest_hashes.json";
+    public const string CnbStableSource =
+        "https://cnb.cool/TeamMajdata/MajdataPlay_Build/-/git/raw/main/";
+    public const string CnbStableHashes =
+        CnbStableSource + "smallest_hashes.json?download=true";
+    public const string CnbStableBase =
+        CnbStableSource;
     public const string TestNightlyApi =
         "https://api.github.com/repos/TeamMajdata/MajdataPlay/releases/tags/nightly";
     public const string TestNightlyAsset =
@@ -72,12 +80,11 @@ internal sealed class GameManager
             await InstallStableFromFilesAsync(
                 targetRoot,
                 preserveUserData: false,
-                routePreference,
+                "cnb-stable",
                 progress,
                 cancellationToken);
             return;
         }
-
         await InstallGamePackageAsync(
             targetRoot,
             prerelease,
@@ -99,12 +106,11 @@ internal sealed class GameManager
             await InstallStableFromFilesAsync(
                 targetRoot,
                 preserveUserData: true,
-                routePreference,
+                "cnb-stable",
                 progress,
                 cancellationToken);
             return;
         }
-
         await InstallGamePackageAsync(
             targetRoot,
             prerelease,
@@ -134,10 +140,36 @@ internal sealed class GameManager
         try
         {
             progress.Report(("正在读取稳定版文件清单…", null));
-            await DownloadSmallFileWithMirrorsAsync(
-                StableHashes,
-                manifestPath,
-                cancellationToken);
+            if (IsCnbRoute(routePreference) ||
+                routePreference.Equals("cnb-stable", StringComparison.OrdinalIgnoreCase))
+            {
+                try
+                {
+                    await DownloadSmallFileAsync(
+                        CnbStableHashes,
+                        manifestPath,
+                        cancellationToken);
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    AppLogger.Write("CNB 稳定版清单失败，回退 GitHub 加速线路", ex);
+                    await DownloadSmallFileWithMirrorsAsync(
+                        StableHashes,
+                        manifestPath,
+                        cancellationToken);
+                }
+            }
+            else
+            {
+                await DownloadSmallFileWithMirrorsAsync(
+                    StableHashes,
+                    manifestPath,
+                    cancellationToken);
+            }
             var entries = JsonSerializer.Deserialize<List<GameHashEntry>>(
                               await File.ReadAllTextAsync(manifestPath, cancellationToken),
                               JsonOptions.Default)
@@ -148,10 +180,17 @@ internal sealed class GameManager
             }
 
             Directory.CreateDirectory(stagedRoot);
-            for (var index = 0; index < entries.Count; index++)
+            var completedFiles = 0;
+            await Parallel.ForEachAsync(
+                entries,
+                new ParallelOptions
+                {
+                    MaxDegreeOfParallelism = 5,
+                    CancellationToken = cancellationToken
+                },
+                async (entry, token) =>
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                var entry = entries[index];
+                token.ThrowIfCancellationRequested();
                 RemoveInvalidStagedFile(stagedRoot, entry);
                 if (!string.IsNullOrWhiteSpace(entry.Checksum))
                 {
@@ -159,23 +198,25 @@ internal sealed class GameManager
                         stagedRoot,
                         entry.FilePath.Replace('/', Path.DirectorySeparatorChar));
                     if (File.Exists(existingPath) &&
-                        await MatchesChecksumAsync(existingPath, entry.Checksum, cancellationToken))
+                        await MatchesChecksumAsync(existingPath, entry.Checksum, token))
                     {
-                        continue;
+                        var skippedProgress = Interlocked.Increment(ref completedFiles);
+                        return;
                     }
                 }
                 var destination = Path.Combine(
                     stagedRoot,
                     entry.FilePath.Replace('/', Path.DirectorySeparatorChar));
+                var current = Interlocked.Increment(ref completedFiles);
                 progress.Report((
-                    $"正在下载稳定版 {index + 1:N0}/{entries.Count:N0} · {entry.FilePath}",
-                    (double)index / entries.Count));
+                    $"正在下载稳定版 {current:N0}/{entries.Count:N0} · {entry.FilePath}",
+                    (double)current / entries.Count));
                 await DownloadAcceleratedFileAsync(
                     entry,
                     destination,
                     routePreference,
-                    cancellationToken);
-            }
+                    token);
+            });
 
             if (!IsInstalled(stagedRoot))
             {
@@ -214,15 +255,22 @@ internal sealed class GameManager
         var parent = Directory.GetParent(Path.TrimEndingDirectorySeparator(targetRoot))?.FullName
                      ?? throw new InvalidOperationException("游戏目录无效");
         Directory.CreateDirectory(parent);
-        var zipPath = Path.Combine(parent, ".majdata-game-download.zip");
+        var zipStem = prerelease ? ".majdata-prerelease-download" : ".majdata-stable-download";
+        var zipPath = Path.Combine(parent, zipStem + ".zip");
         var extractRoot = Path.Combine(parent, ".majdata-game-extract-" + Guid.NewGuid().ToString("N"));
         var stagedRoot = Path.Combine(parent, ".majdata-game-stage-" + Guid.NewGuid().ToString("N"));
         try
         {
             var archiveUrl = prerelease ? TestNightlyAsset : StableArchive;
+            var packageName = prerelease ? "测试版 nightly" : "稳定版 build";
+            if (!prerelease)
+            {
+                archiveUrl = CnbStableArchive;
+                routePreference = "cnb-stable";
+            }
             var sources = new[]
             {
-                (Name: prerelease ? "GitHub 测试版" : "GitHub 稳定版", Url: archiveUrl)
+                (Name: packageName, Url: archiveUrl)
             };
             Exception? lastError = null;
             for (var attempt = 0; attempt < sources.Length; attempt++)
@@ -305,6 +353,7 @@ internal sealed class GameManager
                 _ = await SHA256.HashDataAsync(stream, cancellationToken);
             }
 
+            _ = await ReadNightlyReleaseAsync(cancellationToken);
             progress.Report(("正在解压游戏文件", null));
             Directory.CreateDirectory(extractRoot);
             await ExtractZipWithProgressAsync(
@@ -324,8 +373,10 @@ internal sealed class GameManager
             SetChannelMarker(stagedRoot, prerelease);
             if (prerelease)
             {
-                var nightlyId = await ReadNightlyReleaseIdAsync(cancellationToken);
-                File.WriteAllText(Path.Combine(stagedRoot, ".majdata-nightly-id"), nightlyId);
+                var nightly = await ReadNightlyReleaseAsync(cancellationToken);
+                File.WriteAllText(
+                    Path.Combine(stagedRoot, ".majdata-nightly-id"),
+                    nightly.Id);
             }
             else
             {
@@ -342,12 +393,26 @@ internal sealed class GameManager
         }
         finally
         {
-            TryDelete(GitHubAcceleratedDownloader.RouteMarkerPath(zipPath));
-            TryDelete(zipPath + ".size");
+            DeleteGamePackageFiles(zipPath);
             TryDeleteFolder(extractRoot);
             TryDeleteFolder(stagedRoot);
         }
     }
+
+    private static void DeleteGamePackageFiles(string zipPath)
+    {
+        TryDelete(zipPath);
+        TryDelete(zipPath + ".part");
+        for (var index = 0; index < 8; index++)
+        {
+            TryDelete(zipPath + $".segment{index}");
+        }
+        TryDelete(GitHubAcceleratedDownloader.RouteMarkerPath(zipPath));
+        TryDelete(zipPath + ".size");
+    }
+
+    public static void DeleteGamePackageFilesForTest(string zipPath) =>
+        DeleteGamePackageFiles(zipPath);
 
     private static void CopyPreservedUserData(string sourceRoot, string targetRoot)
     {
@@ -505,12 +570,25 @@ internal sealed class GameManager
         CancellationToken cancellationToken)
     {
         var encodedPath = string.Join('/', file.FilePath.Split('/').Select(Uri.EscapeDataString));
-        var url = "https://raw.githubusercontent.com/TeamMajdata/MajdataPlay_Build/main/" + encodedPath;
+        var githubUrl = "https://raw.githubusercontent.com/TeamMajdata/MajdataPlay_Build/main/" + encodedPath;
+        var url = IsCnbRoute(routePreference) ||
+                  routePreference.Equals("cnb-stable", StringComparison.OrdinalIgnoreCase)
+            ? CnbStableBase + encodedPath
+            : githubUrl;
         Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
         var partPath = destination + ".part";
         var candidates = GitHubAcceleratedDownloader
             .DownloadCandidates(url, routePreference)
             .ToList();
+        if (IsCnbRoute(routePreference) ||
+            routePreference.Equals("cnb-stable", StringComparison.OrdinalIgnoreCase))
+        {
+            candidates = candidates
+                .Where(candidate => !candidate.Equals(CnbStableBase + encodedPath, StringComparison.OrdinalIgnoreCase))
+                .Prepend(CnbStableBase + encodedPath)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
         for (var attempt = 0; ; attempt++)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -527,7 +605,7 @@ internal sealed class GameManager
                     PooledConnectionLifetime = TimeSpan.FromMinutes(5)
                 })
                 {
-                    Timeout = TimeSpan.FromSeconds(25)
+                    Timeout = TimeSpan.FromMinutes(3)
                 };
                 http.DefaultRequestHeaders.UserAgent.ParseAdd("MajdataSync/1.8");
                 using var request = new HttpRequestMessage(HttpMethod.Get, candidate);
@@ -558,6 +636,7 @@ internal sealed class GameManager
                 if (existing > 0 && !append)
                 {
                     existing = 0;
+                    TryDelete(partPath);
                 }
                 await using var source = await response.Content.ReadAsStreamAsync(cancellationToken);
                 await using var output = new FileStream(
@@ -567,7 +646,19 @@ internal sealed class GameManager
                     FileShare.None,
                     128 * 1024,
                     FileOptions.Asynchronous | FileOptions.SequentialScan);
-                await source.CopyToAsync(output, cancellationToken);
+                var buffer = new byte[256 * 1024];
+                while (true)
+                {
+                    using var stallCancellation =
+                        CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                    stallCancellation.CancelAfter(TimeSpan.FromSeconds(60));
+                    var read = await source.ReadAsync(buffer, stallCancellation.Token);
+                    if (read == 0)
+                    {
+                        break;
+                    }
+                    await output.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
+                }
                 await output.FlushAsync(cancellationToken);
                 await output.DisposeAsync();
                 File.Move(partPath, destination, overwrite: true);
@@ -580,6 +671,10 @@ internal sealed class GameManager
             catch (Exception exception)
             {
                 AppLogger.Write($"稳定版文件下载失败 {file.FilePath} 第 {attempt + 1} 次", exception);
+                if (attempt >= 12)
+                {
+                    throw;
+                }
                 await Task.Delay(150, cancellationToken);
             }
         }
@@ -710,20 +805,43 @@ internal sealed class GameManager
         string gameRoot,
         CancellationToken cancellationToken)
     {
-        var id = await ReadNightlyReleaseIdAsync(cancellationToken);
+        var latest = await ReadNightlyReleaseAsync(cancellationToken);
         var marker = Path.Combine(gameRoot, ".majdata-nightly-id");
-        var current = File.Exists(marker) ? await File.ReadAllTextAsync(marker, cancellationToken) : "";
-        var changed = !string.Equals(current.Trim(), id, StringComparison.Ordinal);
+        var localVersion = File.Exists(marker)
+            ? (await File.ReadAllTextAsync(marker, cancellationToken)).Trim()
+            : "";
+        if (string.IsNullOrWhiteSpace(localVersion))
+        {
+            var exe = Path.Combine(gameRoot, "MajdataPlay.exe");
+            var version = File.Exists(exe)
+                ? FileVersionInfo.GetVersionInfo(exe).FileVersion
+                : null;
+            localVersion = version ?? "";
+        }
+        var changed = !string.Equals(
+                          localVersion,
+                          latest.Tag,
+                          StringComparison.OrdinalIgnoreCase) &&
+                      !string.Equals(
+                          localVersion,
+                          latest.Id,
+                          StringComparison.OrdinalIgnoreCase);
         return new GameUpdateResult
         {
             Files = changed
-                ? [new GameHashEntry { Name = "MajdataPlay-StandaloneWindows64-nightly.zip", FilePath = id, Checksum = id }]
+                ? [new GameHashEntry { Name = latest.Name, FilePath = latest.Tag, Checksum = latest.Id }]
                 : [],
             ManifestUrl = TestNightlyApi
         };
     }
 
     private static async Task<string> ReadNightlyReleaseIdAsync(
+        CancellationToken cancellationToken)
+    {
+        return (await ReadNightlyReleaseAsync(cancellationToken)).Id;
+    }
+
+    private static async Task<(string Id, string Tag, string Name)> ReadNightlyReleaseAsync(
         CancellationToken cancellationToken)
     {
         var metadataPath = Path.Combine(
@@ -738,11 +856,20 @@ internal sealed class GameManager
             var id = document.RootElement.TryGetProperty("id", out var value)
                 ? value.ToString()
                 : "";
+            var tag = document.RootElement.TryGetProperty("tag_name", out var tagValue)
+                ? tagValue.ToString()
+                : "";
+            var name = document.RootElement.TryGetProperty("name", out var nameValue)
+                ? nameValue.ToString()
+                : "";
             if (string.IsNullOrWhiteSpace(id))
             {
                 throw new InvalidDataException("无法读取测试版版本号");
             }
-            return id;
+            return (
+                id,
+                string.IsNullOrWhiteSpace(tag) ? id : tag.Trim(),
+                string.IsNullOrWhiteSpace(name) ? "nightly.zip" : name.Trim());
         }
         finally
         {
@@ -760,7 +887,25 @@ internal sealed class GameManager
             Path.GetTempPath(),
             "MajdataSync",
             "smallest_hashes-" + Guid.NewGuid().ToString("N") + ".json");
-        await DownloadSmallFileWithMirrorsAsync(manifestUrl, manifestPath, cancellationToken);
+        if (useCnb)
+        {
+            try
+            {
+                await DownloadSmallFileAsync(CnbStableHashes, manifestPath, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch
+            {
+                await DownloadSmallFileWithMirrorsAsync(manifestUrl, manifestPath, cancellationToken);
+            }
+        }
+        else
+        {
+            await DownloadSmallFileWithMirrorsAsync(manifestUrl, manifestPath, cancellationToken);
+        }
         List<GameHashEntry> entries;
         try
         {
@@ -792,8 +937,15 @@ internal sealed class GameManager
             }
         }
 
-        return new GameUpdateResult { Files = changed, ManifestUrl = manifestUrl };
+        return new GameUpdateResult
+        {
+            Files = changed,
+            ManifestUrl = useCnb ? CnbStableHashes : manifestUrl
+        };
     }
+
+    private static bool IsCnbRoute(string routePreference) =>
+        routePreference.Equals("cnb", StringComparison.OrdinalIgnoreCase);
 
     private static async Task DownloadSmallFileAsync(
         string url,
@@ -959,7 +1111,10 @@ internal sealed class GameManager
             "https://github.com/TeamMajdata/MajdataPlay_Build/raw/refs/heads/main/"
         };
         var encodedPath = string.Join('/', file.FilePath.Split('/').Select(Uri.EscapeDataString));
-        var url = hosts[0] + encodedPath;
+        var githubUrl = hosts[0] + encodedPath;
+        var url = IsCnbRoute(routePreference)
+            ? CnbStableBase + encodedPath
+            : githubUrl;
         Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
         var partPath = destination + ".part";
         Exception? lastError = null;
@@ -971,6 +1126,15 @@ internal sealed class GameManager
         var acceleratedUrls = GitHubAcceleratedDownloader
             .DownloadCandidates(url, routePreference)
             .ToList();
+        if (IsCnbRoute(routePreference))
+        {
+            acceleratedUrls = acceleratedUrls
+                .Where(candidate => !candidate.Equals(CnbStableBase + encodedPath, StringComparison.OrdinalIgnoreCase))
+                .Prepend(CnbStableBase + encodedPath)
+                .Append(githubUrl)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
         for (var attempt = 0; ; attempt++)
         {
             cancellationToken.ThrowIfCancellationRequested();

@@ -9,32 +9,101 @@ internal sealed class GitHubAcceleratedDownloader
 {
     private const int SegmentCount = 8;
     private const int MaxParallelSegments = 6;
-    private const int ProbeBytes = 512 * 1024;
     private static readonly TimeSpan StallTimeout = TimeSpan.FromSeconds(25);
     private static readonly TimeSpan RouteRetryDelay = TimeSpan.FromSeconds(4);
     private static readonly object RouteGate = new();
     private static readonly Dictionary<string, string> SelectedRoutes =
         new(StringComparer.OrdinalIgnoreCase);
-    private static readonly string[] Mirrors =
+    private static readonly Dictionary<string, DateTimeOffset> MirrorCooldowns =
+        new(StringComparer.OrdinalIgnoreCase);
+    private static readonly string[] BuiltInMirrors =
     [
         "https://ghfast.top/",
         "https://gh-proxy.com/",
-        "https://ghproxy.net/"
+        "https://ghproxy.net/",
+        "https://gh.ddlc.top/",
+        "https://ghfile.geekertao.top/",
+        "https://api.gitproxy.dev/"
     ];
+    private static readonly string[] DefaultMirrors = LoadMirrors(
+        SettingsStore.Load().GameDownloadMirrors);
+    private static IReadOnlyList<string> Mirrors => DefaultMirrors;
+
+    private static readonly TimeSpan MirrorCooldownPeriod = TimeSpan.FromMinutes(15);
+
+    private static string[] LoadMirrors(IEnumerable<string>? configuredMirrors)
+    {
+        try
+        {
+            var builtIn = BuiltInMirrors.Select(NormalizeMirror).ToArray();
+            var mirrors = (configuredMirrors ?? [])
+                .Select(NormalizeMirror)
+                .Where(mirror => mirror.Length > 0)
+                .Where(mirror => !builtIn.Contains(mirror, StringComparer.OrdinalIgnoreCase))
+                .Concat(builtIn)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            if (mirrors.Length > 0)
+            {
+                return mirrors;
+            }
+        }
+        catch (Exception ex)
+        {
+            AppLogger.Write("无法读取 GitHub 镜像配置，使用内置镜像", ex);
+        }
+        return BuiltInMirrors.Select(NormalizeMirror).ToArray();
+    }
+
+    private static string NormalizeMirror(string mirror)
+    {
+        var value = mirror.Trim();
+        if (value.Length == 0)
+        {
+            return "";
+        }
+        if (value.Equals("https://gitproxy.dev", StringComparison.OrdinalIgnoreCase) ||
+            value.Equals("https://gitproxy.dev/", StringComparison.OrdinalIgnoreCase))
+        {
+            return "https://api.gitproxy.dev/";
+        }
+        if (!value.EndsWith("/", StringComparison.Ordinal))
+        {
+            value += "/";
+        }
+        return value;
+    }
+
+    private static string MirrorUrl(string mirror, string url)
+    {
+        if (!mirror.Contains("gitproxy.dev", StringComparison.OrdinalIgnoreCase))
+        {
+            return mirror + url;
+        }
+        var target = url.StartsWith("https://", StringComparison.OrdinalIgnoreCase)
+            ? url["https://".Length..]
+            : url.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+                ? url["http://".Length..]
+                : url;
+        return mirror + target;
+    }
 
     public static IReadOnlyList<(string Key, string Label, string Url)> Routes(string url) =>
     [
-        ("fast", "Fast 加速", "https://ghfast.top/" + url),
-        ("proxy", "Proxy 加速", "https://gh-proxy.com/" + url),
-        ("mirror", "Mirror 加速", "https://ghproxy.net/" + url),
+        ("fast", "Fast 加速", ""),
+        ("proxy", "Proxy 加速", MirrorUrl(MirrorByToken("gh-proxy.com"), url)),
+        ("mirror", "Mirror 加速", MirrorUrl(MirrorByToken("ghproxy.net"), url)),
         ("direct", "直连 GitHub", url)
     ];
 
     public static IReadOnlyList<string> CandidateUrls(string url) =>
-        Mirrors
-            .Select(mirror => mirror + url)
+        AvailableMirrors()
+            .Select(mirror => MirrorUrl(mirror, url))
             .Append(url)
             .ToArray();
+
+    public static string BuildMirrorUrl(string mirror, string url) =>
+        MirrorUrl(NormalizeMirror(mirror), url);
 
     public static IReadOnlyList<string> DownloadCandidates(
         string url,
@@ -50,6 +119,27 @@ internal sealed class GitHubAcceleratedDownloader
         if (routePreference.Equals("auto", StringComparison.OrdinalIgnoreCase))
         {
             return CandidateUrls(url);
+        }
+
+        if (routePreference.Equals("cnb", StringComparison.OrdinalIgnoreCase) ||
+            routePreference.Equals("cnb-stable", StringComparison.OrdinalIgnoreCase))
+        {
+            return url.StartsWith("https://cnb.cool/", StringComparison.OrdinalIgnoreCase)
+                ? [url]
+                : CandidateUrls(url);
+        }
+
+        if (routePreference.Equals("fast", StringComparison.OrdinalIgnoreCase))
+        {
+            var ordered = CandidateUrls(url).ToList();
+            var fastMirror = ordered.FirstOrDefault(candidate =>
+                candidate.StartsWith("https://ghfast.top/", StringComparison.OrdinalIgnoreCase));
+            if (fastMirror is not null)
+            {
+                ordered.Remove(fastMirror);
+                ordered.Insert(0, fastMirror);
+            }
+            return ordered;
         }
 
         var routeArray = routes.ToArray();
@@ -84,14 +174,20 @@ internal sealed class GitHubAcceleratedDownloader
             .OrderByDescending(candidate =>
                 candidate.Equals(preferred.Url, StringComparison.OrdinalIgnoreCase))
             .Select(candidate => (
-                Label: candidate.Equals(url, StringComparison.Ordinal)
-                    ? "直连 GitHub"
-                    : MirrorLabel(Mirrors.First(mirror =>
-                        candidate.StartsWith(mirror, StringComparison.Ordinal))),
+                Label: LabelForUrl(candidate),
                 Url: candidate))
             .ToList();
+        if (routePreference.Equals("cnb-stable", StringComparison.OrdinalIgnoreCase))
+        {
+            routes = [(Label: "CNB 稳定版", Url: url)];
+        }
+        if (routes.Count == 0)
+        {
+            routes = [(Label: "GitHub 直连", Url: url)];
+        }
 
         var routeIndex = 0;
+        var routeFailures = 0;
         while (true)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -115,23 +211,84 @@ internal sealed class GitHubAcceleratedDownloader
             {
                 throw;
             }
-            catch (Exception ex)
+            catch (OperationCanceledException ex)
             {
                 AppLogger.Write(
-                    $"线路 {selection.Label} 下载暂停，将保留断点并自动继续",
+                    $"线路 {selection.Label} 下载超时，保留断点并优先重试当前线路",
                     ex);
                 progress?.Report((
                     selection.Label,
                     GetDownloadedBytes(destination),
                     null,
                     -1));
-                await Task.Delay(RouteRetryDelay, cancellationToken);
-                routeIndex++;
+                routeFailures++;
+                if (routeFailures >= 3)
+                {
+                    MarkMirrorCooldown(selection.Url);
+                    routeFailures = 0;
+                    routeIndex++;
+                }
+                await Task.Delay(
+                    TimeSpan.FromSeconds(Math.Min(15, routeFailures + 1)),
+                    cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Write(
+                    $"线路 {selection.Label} 下载波动，保留断点并优先重试当前线路",
+                    ex);
+                progress?.Report((
+                    selection.Label,
+                    GetDownloadedBytes(destination),
+                    null,
+                    -1));
+                routeFailures++;
+                if (routeFailures >= 3)
+                {
+                    MarkMirrorCooldown(selection.Url);
+                    routeFailures = 0;
+                    routeIndex++;
+                }
+                await Task.Delay(
+                    TimeSpan.FromSeconds(Math.Min(15, routeFailures + 1)),
+                    cancellationToken);
             }
         }
     }
 
-    public async Task<(string Label, string Url)> SelectRouteAsync(
+    private static void MarkMirrorCooldown(string url)
+    {
+        var mirror = Mirrors.FirstOrDefault(prefix =>
+            url.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+        if (mirror is null)
+        {
+            return;
+        }
+        lock (RouteGate)
+        {
+            MirrorCooldowns[mirror] = DateTimeOffset.Now.Add(MirrorCooldownPeriod);
+        }
+    }
+
+    private static IReadOnlyList<string> AvailableMirrors()
+    {
+        var now = DateTimeOffset.Now;
+        lock (RouteGate)
+        {
+            foreach (var expired in MirrorCooldowns
+                         .Where(item => item.Value <= now)
+                         .Select(item => item.Key)
+                         .ToArray())
+            {
+                MirrorCooldowns.Remove(expired);
+            }
+            return Mirrors
+                .Where(mirror => !MirrorCooldowns.ContainsKey(mirror))
+                .ToArray();
+        }
+    }
+
+    public Task<(string Label, string Url)> SelectRouteAsync(
         string url,
         CancellationToken cancellationToken,
         string? destination = null,
@@ -144,7 +301,7 @@ internal sealed class GitHubAcceleratedDownloader
             {
                 SelectedRoutes[url] = markerRoute.Url;
             }
-            return markerRoute;
+            return Task.FromResult(markerRoute);
         }
 
         lock (RouteGate)
@@ -153,14 +310,33 @@ internal sealed class GitHubAcceleratedDownloader
                 CandidateUrls(url).Any(candidate =>
                     candidate.Equals(pinned, StringComparison.OrdinalIgnoreCase)))
             {
-                return (
-                    pinned.Equals(url, StringComparison.Ordinal)
-                        ? "直连 GitHub"
-                        : MirrorLabel(Mirrors.First(mirror =>
-                            pinned.StartsWith(mirror, StringComparison.Ordinal))),
-                    pinned);
+                return Task.FromResult((LabelForUrl(pinned), pinned));
             }
 
+        }
+
+        if (routePreference.Equals("fast", StringComparison.OrdinalIgnoreCase))
+        {
+            var configured = CandidateUrls(url).FirstOrDefault(candidate =>
+                candidate.StartsWith("https://ghfast.top/", StringComparison.OrdinalIgnoreCase)) ??
+                CandidateUrls(url).FirstOrDefault(candidate =>
+                    candidate.StartsWith("https://gh-proxy.com/", StringComparison.OrdinalIgnoreCase)) ??
+                MirrorUrl(BuiltInMirrors[0], url);
+            lock (RouteGate)
+            {
+                SelectedRoutes[url] = configured;
+            }
+            return Task.FromResult(("Fast 加速", configured));
+        }
+
+        if (routePreference.Equals("cnb", StringComparison.OrdinalIgnoreCase) ||
+            routePreference.Equals("cnb-stable", StringComparison.OrdinalIgnoreCase))
+        {
+            lock (RouteGate)
+            {
+                SelectedRoutes[url] = url;
+            }
+            return Task.FromResult(("CNB 稳定版", url));
         }
 
         if (!routePreference.Equals("auto", StringComparison.OrdinalIgnoreCase))
@@ -175,33 +351,19 @@ internal sealed class GitHubAcceleratedDownloader
             {
                 SelectedRoutes[url] = configured.Url;
             }
-            return (configured.Label, configured.Url);
-        }
-
-        var ranked = await RankCandidatesAsync(url, cancellationToken);
-        if (ranked.Count > 0)
-        {
-            var selected = ranked[0];
-            lock (RouteGate)
-            {
-                SelectedRoutes[url] = selected.Url;
-            }
-            return selected;
+            return Task.FromResult((configured.Label, configured.Url));
         }
 
         var fallback = DownloadCandidates(url, routePreference)
             .Select(candidate => (
-                Label: candidate.Equals(url, StringComparison.Ordinal)
-                    ? "直连 GitHub"
-                    : MirrorLabel(Mirrors.First(mirror =>
-                        candidate.StartsWith(mirror, StringComparison.Ordinal))),
+                Label: LabelForUrl(candidate),
                 Url: candidate))
             .First();
         lock (RouteGate)
         {
             SelectedRoutes[url] = fallback.Url;
         }
-        return fallback;
+        return Task.FromResult(fallback);
     }
 
     public static string RouteMarkerPath(string destination) => destination + ".source";
@@ -214,6 +376,19 @@ internal sealed class GitHubAcceleratedDownloader
     public static void ClearRouteMarker(string destination)
     {
         TryDelete(RouteMarkerPath(destination));
+    }
+
+    public static void PinRoute(
+        string url,
+        string destination,
+        string label,
+        string candidate)
+    {
+        lock (RouteGate)
+        {
+            SelectedRoutes[url] = candidate;
+        }
+        WriteRouteMarker(destination, (label, candidate));
     }
 
     public static (string Label, string Url)? ReadRouteMarkerForTest(string destination) =>
@@ -248,75 +423,6 @@ internal sealed class GitHubAcceleratedDownloader
         return true;
     }
 
-    public static async Task<List<(string Label, string Url)>> RankCandidatesAsync(
-        string url,
-        CancellationToken cancellationToken)
-    {
-        using var http = CreateClient();
-        var probes = CandidateUrls(url)
-            .Select(candidate => (
-                Label: candidate.Equals(url, StringComparison.Ordinal)
-                    ? "直连 GitHub"
-                    : MirrorLabel(Mirrors.First(mirror =>
-                        candidate.StartsWith(mirror, StringComparison.Ordinal))),
-                Url: candidate));
-        var results = await Task.WhenAll(probes.Select(probe =>
-            ProbeAsync(http, probe.Label, probe.Url, cancellationToken)));
-        return results
-            .Where(result => result.Speed > 0)
-            .OrderByDescending(result => result.Speed)
-            .Select(result => (result.Label, result.Url))
-            .ToList();
-    }
-
-    private static async Task<(string Label, string Url, double Speed)> ProbeAsync(
-        HttpClient http,
-        string label,
-        string url,
-        CancellationToken cancellationToken)
-    {
-        using var probeCancellation = CancellationTokenSource.CreateLinkedTokenSource(
-            cancellationToken);
-        probeCancellation.CancelAfter(TimeSpan.FromSeconds(10));
-        try
-        {
-            using var request = new HttpRequestMessage(HttpMethod.Get, url);
-            request.Headers.Range = new RangeHeaderValue(0, ProbeBytes - 1);
-            var stopwatch = Stopwatch.StartNew();
-            using var response = await http.SendAsync(
-                request,
-                HttpCompletionOption.ResponseHeadersRead,
-                probeCancellation.Token);
-            response.EnsureSuccessStatusCode();
-            await using var stream = await response.Content.ReadAsStreamAsync(
-                probeCancellation.Token);
-            var buffer = new byte[64 * 1024];
-            var total = 0;
-            while (total < ProbeBytes)
-            {
-                var read = await stream.ReadAsync(buffer, probeCancellation.Token);
-                if (read == 0)
-                {
-                    break;
-                }
-                total += read;
-            }
-            stopwatch.Stop();
-            var speed = total / Math.Max(0.01, stopwatch.Elapsed.TotalSeconds);
-            return total >= 256 * 1024
-                ? (label, url, speed)
-                : (label, url, 0);
-        }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-        {
-            return (label, url, 0);
-        }
-        catch
-        {
-            return (label, url, 0);
-        }
-    }
-
     private static async Task DownloadResumableAsync(
         string destination,
         (string Label, string Url) candidate,
@@ -325,7 +431,17 @@ internal sealed class GitHubAcceleratedDownloader
     {
         using var http = CreateClient();
         var range = await ProbeRangeAsync(http, candidate.Url, cancellationToken);
-        if (!range.SupportsRange || range.Total is null or < 1_000_000)
+        if (candidate.Url.StartsWith("https://cnb.cool/", StringComparison.OrdinalIgnoreCase))
+        {
+            await DownloadSingleResumableAsync(
+                http,
+                destination,
+                candidate,
+                progress,
+                cancellationToken);
+            return;
+        }
+        if (!range.SupportsRange || range.Total is null)
         {
             await DownloadSingleFromSourceAsync(
                 http,
@@ -335,14 +451,8 @@ internal sealed class GitHubAcceleratedDownloader
                 cancellationToken);
             return;
         }
-
         var lengthMarker = destination + ".size";
         var total = range.Total.Value;
-        if (total < 100_000_000)
-        {
-            throw new IOException(
-                $"下载线路返回的游戏包长度异常（{total:N0} 字节），已保留断点并准备换线");
-        }
         if (File.Exists(lengthMarker) &&
             long.TryParse(File.ReadAllText(lengthMarker), out var knownTotal) &&
             knownTotal > total)
@@ -502,7 +612,7 @@ internal sealed class GitHubAcceleratedDownloader
                 {
                     using var stallCancellation =
                         CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                    stallCancellation.CancelAfter(TimeSpan.FromSeconds(20));
+                    stallCancellation.CancelAfter(TimeSpan.FromSeconds(35));
                     var wanted = (int)Math.Min(buffer.Length, segment.Expected - offset);
                     var read = await source.ReadAsync(
                         buffer.AsMemory(0, wanted),
@@ -526,7 +636,7 @@ internal sealed class GitHubAcceleratedDownloader
             catch (Exception ex)
             {
                 lastError = ex.Message;
-                var wait = TimeSpan.FromSeconds(Math.Min(20, 1 + attempt * 0.5));
+                var wait = TimeSpan.FromSeconds(Math.Min(8, 1 + attempt * 0.5));
                 await Task.Delay(wait, cancellationToken);
             }
         }
@@ -623,13 +733,130 @@ internal sealed class GitHubAcceleratedDownloader
         progress?.Report((candidate.Label, received, total ?? received, 0));
     }
 
+    private static async Task DownloadSingleResumableAsync(
+        HttpClient http,
+        string destination,
+        (string Label, string Url) candidate,
+        IProgress<(string Source, long Bytes, long? Total, double Speed)>? progress,
+        CancellationToken cancellationToken)
+    {
+        var part = destination + ".part";
+        var failures = 0;
+        while (true)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var existing = File.Exists(part) ? new FileInfo(part).Length : 0;
+            try
+            {
+                using var request = new HttpRequestMessage(HttpMethod.Get, candidate.Url);
+                using var response = await http.SendAsync(
+                    request,
+                    HttpCompletionOption.ResponseHeadersRead,
+                    cancellationToken);
+                response.EnsureSuccessStatusCode();
+                var total = response.Content.Headers.ContentLength;
+                await using var source = await response.Content.ReadAsStreamAsync(
+                    cancellationToken);
+                await using var output = new FileStream(
+                    part,
+                    FileMode.Create,
+                    FileAccess.Write,
+                    FileShare.None,
+                    256 * 1024,
+                    FileOptions.Asynchronous | FileOptions.SequentialScan);
+                var buffer = new byte[1024 * 1024];
+                var received = 0L;
+                var speedWatch = Stopwatch.StartNew();
+                var speedBytes = 0L;
+                while (true)
+                {
+                    using var stallCancellation =
+                        CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                    stallCancellation.CancelAfter(TimeSpan.FromSeconds(45));
+                    var read = await source.ReadAsync(
+                        buffer.AsMemory(0, buffer.Length),
+                        stallCancellation.Token);
+                    if (read == 0)
+                    {
+                        break;
+                    }
+                    await output.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
+                    received += read;
+                    speedBytes += read;
+                    failures = 0;
+                    if (speedWatch.ElapsedMilliseconds >= 350)
+                    {
+                        progress?.Report((
+                            candidate.Label,
+                            received,
+                            total,
+                            speedBytes / Math.Max(0.001, speedWatch.Elapsed.TotalSeconds)));
+                        speedBytes = 0;
+                        speedWatch.Restart();
+                    }
+                }
+                await output.FlushAsync(cancellationToken);
+                var completed = new FileInfo(part).Length;
+                if (total is null || completed == total.Value)
+                {
+                    var previous = File.Exists(destination)
+                        ? new FileInfo(destination).Length
+                        : -1;
+                    if (completed <= 0 || completed == previous)
+                    {
+                        throw new IOException("CNB 返回了空的或重复的临时文件");
+                    }
+                    File.Move(part, destination, overwrite: true);
+                    await File.WriteAllTextAsync(
+                        destination + ".size",
+                        completed.ToString(),
+                        cancellationToken);
+                    ClearRouteMarker(destination);
+                    progress?.Report((candidate.Label, completed, completed, 0));
+                    return;
+                }
+                throw new IOException(
+                    $"单流下载未完成：{completed:N0} / {total?.ToString("N0") ?? "未知"} 字节");
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                failures++;
+                var existingBytes = File.Exists(part)
+                    ? new FileInfo(part).Length
+                    : 0;
+                AppLogger.Write(
+                    $"CNB 下载波动，重新连接（该服务不支持断点，已下载临时文件将清理）",
+                    ex);
+                TryDelete(part);
+                progress?.Report((
+                    candidate.Label,
+                    existingBytes,
+                    null,
+                    existingBytes > 0 ? -2 : -1));
+                if (failures >= 2)
+                {
+                    throw new IOException(
+                        "CNB 连接中断，该线路不支持断点续传；请稍后重试稳定版下载",
+                        ex);
+                }
+                await Task.Delay(
+                    TimeSpan.FromSeconds(failures * 2),
+                    cancellationToken);
+            }
+        }
+    }
+
     private static async Task<(bool SupportsRange, long? Total)> ProbeRangeAsync(
         HttpClient http,
         string url,
         CancellationToken cancellationToken)
     {
         if (url.Contains("github.com", StringComparison.OrdinalIgnoreCase) &&
-            !Mirrors.Any(mirror => url.StartsWith(mirror, StringComparison.OrdinalIgnoreCase)) &&
+            !IsMirrorUrl(url) &&
             !url.StartsWith("http://127.0.0.1", StringComparison.OrdinalIgnoreCase) &&
             !url.StartsWith("http://localhost", StringComparison.OrdinalIgnoreCase))
         {
@@ -702,9 +929,35 @@ internal sealed class GitHubAcceleratedDownloader
     }
 
     private static string MirrorLabel(string mirror) =>
+        mirror.Contains("gitproxy.dev", StringComparison.OrdinalIgnoreCase) ? "GitProxy 加速" :
         mirror.Contains("ghfast", StringComparison.OrdinalIgnoreCase) ? "Fast 加速" :
         mirror.Contains("gh-proxy", StringComparison.OrdinalIgnoreCase) ? "Proxy 加速" :
-        "Mirror 加速";
+        mirror.Contains("ghproxy.net", StringComparison.OrdinalIgnoreCase) ? "Mirror 加速" :
+        "GitHub 加速";
+
+    private static string MirrorByToken(string token) =>
+        Mirrors.FirstOrDefault(mirror =>
+            mirror.Contains(token, StringComparison.OrdinalIgnoreCase)) ??
+        Mirrors.First();
+
+    private static bool IsMirrorUrl(string url) =>
+        Mirrors.Any(mirror =>
+            url.StartsWith(mirror, StringComparison.OrdinalIgnoreCase));
+
+    private static string LabelForUrl(string url)
+    {
+        if (!IsMirrorUrl(url) && !url.Contains("github", StringComparison.OrdinalIgnoreCase))
+        {
+            return "GitHub 加速";
+        }
+        if (!IsMirrorUrl(url))
+        {
+            return "直连 GitHub";
+        }
+        return MirrorLabel(
+            Mirrors.First(mirror =>
+                url.StartsWith(mirror, StringComparison.OrdinalIgnoreCase)));
+    }
 
     private static void TryDelete(string path)
     {

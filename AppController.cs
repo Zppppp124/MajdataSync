@@ -489,6 +489,11 @@ internal sealed class AppController : IDisposable
     private bool CurrentChannelIsPrerelease =>
         _settings.GameChannel.Equals("prerelease", StringComparison.OrdinalIgnoreCase);
 
+    private bool IsCnbRoute =>
+        _settings.GameDownloadRoute.Equals("cnb", StringComparison.OrdinalIgnoreCase);
+
+    private string EffectiveGitHubRoute => IsCnbRoute ? "fast" : _settings.GameDownloadRoute;
+
     private string? StableGameRoot =>
         NormalizeConfiguredRoot(
             _settings.StableGameRootPath ??
@@ -634,7 +639,7 @@ internal sealed class AppController : IDisposable
     {
         var route = GetString(payload, "route");
         _settings.GameDownloadSource = "github";
-        _settings.GameDownloadRoute = route is "proxy" or "mirror" or "direct" or "auto"
+        _settings.GameDownloadRoute = route is "proxy" or "mirror" or "direct" or "cnb" or "auto"
             ? route
             : "fast";
         SettingsStore.Save(_settings);
@@ -784,7 +789,7 @@ internal sealed class AppController : IDisposable
             await _game.InstallGameAsync(
                 target,
                 prerelease,
-                _settings.GameDownloadRoute,
+                prerelease ? "fast" : "cnb-stable",
                 status,
                 _operation!.Token);
             var detected = FolderDetector.DetectFrom(target);
@@ -831,22 +836,9 @@ internal sealed class AppController : IDisposable
         BeginOperation();
         try
         {
-            if (GameManager.IsPrerelease(root))
-            {
-                _pendingGameUpdates = [];
-                await SendAsync("gameUpdates", new { count = 0, files = Array.Empty<string>() });
-                await SendAsync("operation", new
-                {
-                    stage = "done",
-                    message = "测试版使用 nightly 通道；点击“更新”可下载最新完整包"
-                });
-                await SendGameStatusAsync();
-                return;
-            }
-
             _pendingGameUpdates = (await _game.CheckGameUpdateAsync(
                 root,
-                useCnb: false,
+                !GameManager.IsPrerelease(root) && IsCnbRoute,
                 _operation!.Token)).Files;
             await SendAsync("gameUpdates", new
             {
@@ -882,54 +874,14 @@ internal sealed class AppController : IDisposable
         BeginOperation();
         try
         {
-            if (GameManager.IsPrerelease(root))
-            {
-                await SendAsync("operation", new
-                {
-                    stage = "download",
-                    message = "正在下载测试版完整包，曲目、皮肤、缓存和设置将保留…",
-                    indeterminate = true
-                });
-                var switchStatus = new Progress<(string Message, double? Progress)>(value =>
-                    _ = SendAsync("operation", new
-                    {
-                        stage = "download",
-                        message = value.Message,
-                        progress = value.Progress,
-                        indeterminate = value.Progress is null
-                    }));
-                await _game.SwitchChannelAsync(
+            var prerelease = GameManager.IsPrerelease(root);
+            var updates = _pendingGameUpdates.Count > 0
+                ? _pendingGameUpdates
+                : (await _game.CheckGameUpdateAsync(
                     root,
-                    true,
-                    _settings.GameDownloadRoute,
-                    switchStatus,
-                    _operation!.Token);
-                _settings.GameChannel = "prerelease";
-                SettingsStore.Save(_settings);
-                _pendingGameUpdates = [];
-                await SendAsync("gameUpdates", new { count = 0, files = Array.Empty<string>() });
-                await SendAsync("operation", new
-                {
-                    stage = "done",
-                    message = "测试版已更新到最新 nightly"
-                });
-                await SendGameStatusAsync();
-                await SendAsync("toast", new
-                {
-                    kind = "success",
-                    message = "MajdataPlay 测试版已更新到最新 nightly"
-                });
-                return;
-            }
-
-            if (_pendingGameUpdates.Count == 0)
-            {
-                _pendingGameUpdates = (await _game.CheckGameUpdateAsync(
-                    root,
-                    _settings.GameDownloadSource != "github",
+                    !prerelease && IsCnbRoute,
                     _operation!.Token)).Files;
-            }
-            if (_pendingGameUpdates.Count == 0)
+            if (updates.Count == 0)
             {
                 await SendAsync("operation", new { stage = "done", message = "游戏已是最新版本" });
                 await SendAsync("gameUpdates", new { count = 0, files = Array.Empty<string>() });
@@ -939,8 +891,10 @@ internal sealed class AppController : IDisposable
             await SendAsync("operation", new
             {
                 stage = "download",
-                message = $"准备更新 {_pendingGameUpdates.Count:N0} 个游戏文件，断点会自动续传…",
-                progress = 0
+                message = prerelease
+                    ? "正在下载测试版 nightly 完整包，曲目、皮肤、缓存和设置将保留…"
+                    : "正在下载稳定版完整包，曲目、皮肤、缓存和设置将保留…",
+                indeterminate = true
             });
             var status = new Progress<(string Message, double? Progress)>(value =>
                 _ = SendAsync("operation", new
@@ -950,21 +904,15 @@ internal sealed class AppController : IDisposable
                     progress = value.Progress,
                     indeterminate = value.Progress is null
                 }));
-            await _game.UpdateGameAsync(
+            await _game.SwitchChannelAsync(
                 root,
-                _pendingGameUpdates,
-                _settings.GameDownloadRoute,
+                prerelease,
+                prerelease ? "fast" : "cnb-stable",
                 status,
                 _operation!.Token);
-            await SendAsync("operation", new
-            {
-                stage = "index",
-                message = "文件更新完成，正在校验游戏完整性…",
-                indeterminate = true
-            });
             var remaining = (await _game.CheckGameUpdateAsync(
                 root,
-                useCnb: false,
+                !prerelease && IsCnbRoute,
                 _operation!.Token)).Files;
             _pendingGameUpdates = remaining;
             await SendAsync("gameUpdates", new
@@ -976,8 +924,8 @@ internal sealed class AppController : IDisposable
             {
                 stage = "done",
                 message = remaining.Count == 0
-                    ? "游戏更新完成，所有文件已校验通过"
-                    : $"更新已执行，仍有 {remaining.Count:N0} 个文件未通过校验"
+                    ? "游戏更新完成，完整包已解压并清理"
+                    : $"更新包已安装，但仍有 {remaining.Count:N0} 个文件需要检查"
             });
             await SendGameStatusAsync();
             await SendAsync("toast", new
@@ -1901,6 +1849,8 @@ internal sealed class AppController : IDisposable
                 chart.Designer.Contains(search, StringComparison.CurrentCultureIgnoreCase));
         }
 
+        query = query.Where(chart => chart.HasDifficulty(request.Difficulty ?? "all", request.Level));
+
         return query.OrderByDescending(chart => chart.Timestamp).ToList();
     }
 
@@ -2255,6 +2205,9 @@ internal sealed class AppController : IDisposable
                     .Any(tag => tag.Contains(search, StringComparison.CurrentCultureIgnoreCase)));
         }
 
+        entries = entries.Where(entry =>
+            entry.Chart.HasDifficulty(query.Difficulty ?? "all", query.Level));
+
         if (query.Status.Equals("new", StringComparison.OrdinalIgnoreCase))
         {
             entries = entries.Where(entry => !entry.Downloaded || entry.Stale);
@@ -2300,12 +2253,79 @@ internal sealed class AppController : IDisposable
             filtered = filtered.Count,
             downloaded = summary.Downloaded,
             newCount = summary.Total - summary.Downloaded,
+            difficulties = BuildDifficultyFilters(_charts),
             page,
             pageSize,
             pageCount,
             items,
             indexedAt = _lastIndexAt
         });
+    }
+
+    private static object[] BuildDifficultyFilters(IEnumerable<ChartItem> charts)
+    {
+        var definitions = new[]
+        {
+            (Key: "bas", Label: "BAS", Index: 0),
+            (Key: "adv", Label: "ADV", Index: 1),
+            (Key: "exp", Label: "EXP", Index: 2),
+            (Key: "mst", Label: "MST", Index: 3),
+            (Key: "remaster", Label: "RE:MASTER", Index: 4)
+        };
+        var items = charts.ToArray();
+        var result = new List<object>();
+        foreach (var definition in definitions)
+        {
+            var levels = items
+                .Select(chart => definition.Index < chart.Levels.Count
+                    ? chart.Levels[definition.Index]
+                    : null)
+                .Where(value => !string.IsNullOrWhiteSpace(value))
+                .Select(value => ChartItem.TryParseDifficultyLevel(value!))
+                .Where(value => value is not null)
+                .Select(value => value!)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(LevelSortKey)
+                .ThenBy(value => value, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            result.Add(new
+            {
+                key = definition.Key,
+                label = definition.Label,
+                levels,
+                count = items.Count(chart =>
+                    chart.HasDifficulty(definition.Key, null))
+            });
+        }
+
+        result.Add(new
+        {
+            key = "other",
+            label = "其他",
+            levels = Array.Empty<string>(),
+            count = items.Count(chart => chart.HasDifficulty("other", null))
+        });
+        result.Add(new
+        {
+            key = "all",
+            label = "全部难度",
+            levels = Array.Empty<string>(),
+            count = items.Length
+        });
+        return result.ToArray();
+    }
+
+    private static decimal LevelSortKey(string value)
+    {
+        var digits = new string(value.TakeWhile(ch =>
+            char.IsDigit(ch) || ch == '.').ToArray());
+        return decimal.TryParse(
+            digits,
+            NumberStyles.AllowDecimalPoint,
+            CultureInfo.InvariantCulture,
+            out var number)
+            ? number
+            : decimal.MaxValue;
     }
 
     private object[] ReadRecent(SyncInventory inventory)
@@ -2420,7 +2440,7 @@ internal sealed class AppController : IDisposable
         return SendAsync("state", new AppStatus
         {
             OperationRunning = _operationRunning,
-            Version = "1.11.0",
+            Version = "1.12.0",
             Site = ChartApi.SiteUrl
         });
     }
@@ -2532,6 +2552,9 @@ internal sealed class AppController : IDisposable
         SyncInventory inventory,
         SyncRequest request)
         => SelectCharts(charts, inventory, request);
+
+    public static object[] BuildDifficultyFiltersForTest(IEnumerable<ChartItem> charts)
+        => BuildDifficultyFilters(charts);
 
     public void Dispose()
     {

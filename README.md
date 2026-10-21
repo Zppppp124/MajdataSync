@@ -4,7 +4,7 @@
 [![release](https://img.shields.io/github/v/release/Zppppp124/MajdataSync?label=release)](https://github.com/Zppppp124/MajdataSync/releases/latest)
 [![download](https://img.shields.io/github/downloads/Zppppp124/MajdataSync/total?label=downloads)](https://github.com/Zppppp124/MajdataSync/releases/latest)
 
-![Majdata Sync 曲目库](docs/assets/hero-sync.svg)
+![Majdata Sync 曲目库](docs/assets/screenshots/library.png)
 
 **Majdata Sync** 是一个给 MajdataPlay 玩家使用的 Windows 曲库工具：从 [majdata.net](https://majdata.net) 找谱面，勾选后批量下载，自动整理成游戏可以直接读取的文件夹；同时还能管理游戏版本、在线缓存、皮肤和内置设置。
 
@@ -12,19 +12,57 @@
 
 > 给喜欢的谱面，点一个大大的赞吧。
 
+## 1.12.0 更新
+
+- 稳定版改为 MajdataHub 同款 CNB 仓库逐文件并发下载，每个文件独立校验。
+- 不再依赖单个 323 MB 稳定版 ZIP，避免下载到 300 MB 断流时整体重来。
+- 曲目搜索加入难度分类与数字等级筛选，覆盖 BASIC、ADVANCED、EXPERT、MASTER、RE:MASTER 和其他难度。
+- 测试版继续使用 Fast 整包加速，默认 `ghfast.top`；单次网络波动优先重连当前线路。
+- 高级设置、皮肤、在线缓存、日期更新和批量勾选下载保持可用。
+
+## 图文一览
+
+### 曲目库
+
+![曲目库主界面](docs/assets/screenshots/library.png)
+
+![曲目难度筛选](docs/assets/screenshots/chart-filters.png)
+
+### 游戏管理
+
+![游戏管理](docs/assets/screenshots/game.png)
+
+稳定版固定使用 MajdataHub 同款 CNB 仓库逐文件下载；测试版使用 Fast 加速下载 nightly ZIP。稳定版不再因单个大 ZIP 在 300 MB 断流而全部重下。
+
+### 皮肤
+
+![皮肤库](docs/assets/screenshots/skins.png)
+
+### 设置与高级设置
+
+![偏好设置](docs/assets/screenshots/settings.png)
+
+![高级设置](docs/assets/screenshots/advanced-settings.png)
+
+### 下载队列
+
+![下载队列](docs/assets/screenshots/tasks.png)
+
+完整操作说明请查看 [离线 HTML 图文说明书](docs/MajdataSync-Manual.html)。
+
 ## 亮点
 
 | 曲目库 | 游戏管理 | 网络与缓存 |
 | --- | --- | --- |
 | 勾选曲目后批量下载 | 稳定版 / 测试版切换 | 谱面本站与镜像优选 |
 | 每首完成立即入库 | 完整包断点续传 | 本地 / 在线缓存双写 |
-| 日期筛选与增量更新 | 启动、渲染 API、编辑模式 | 皮肤下载与直接应用 |
+| 日期、难度与增量筛选 | 启动、渲染 API、编辑模式 | 皮肤下载与直接应用 |
 
 ## 下载
 
-当前版本：**v1.11.0**
+当前版本：**v1.12.0**
 
-[**下载 Windows x64 自包含版本**](https://github.com/Zppppp124/MajdataSync/releases/download/v1.11.0/MajdataSync-win-x64-v1.11.0.zip) · [离线 HTML 使用说明书](docs/MajdataSync-Manual.html) · [查看全部版本](https://github.com/Zppppp124/MajdataSync/releases)
+[**下载 Windows x64 自包含版本**](https://github.com/Zppppp124/MajdataSync/releases/download/v1.12.0/MajdataSync-win-x64-v1.12.0.zip) · [离线 HTML 使用说明书](docs/MajdataSync-Manual.html) · [查看全部版本](https://github.com/Zppppp124/MajdataSync/releases)
 
 Windows 10/11 可直接运行，无需单独安装 .NET。程序界面使用 WebView2，大多数 Windows 10/11 已预装该运行时。
 
@@ -40,7 +78,7 @@ Windows 10/11 可直接运行，无需单独安装 .NET。程序界面使用 Web
 
 ## 曲目库
 
-![曲目勾选与批量下载](docs/assets/feature-library.svg)
+![曲目勾选与批量下载](docs/assets/screenshots/chart-filters.png)
 
 ### 选择与批量下载
 
@@ -63,14 +101,14 @@ Windows 10/11 可直接运行，无需单独安装 .NET。程序界面使用 Web
 
 ## 游戏管理
 
-![游戏管理与版本切换](docs/assets/feature-game.svg)
+![游戏管理与版本切换](docs/assets/screenshots/game.png)
 
 在“游戏管理”页可以选择版本通道、下载/重装游戏、检查更新、打开目录、启动游戏。
 
 | 通道 | 下载来源 | 更新方式 |
 | --- | --- | --- |
-| **稳定版** | `TeamMajdata/MajdataPlay_Build` | 逐文件校验、下载和断点续传 |
-| **测试版 nightly** | `TeamMajdata/MajdataPlay` | 首次下载完整 nightly 包，后续按当前版本检查更新 |
+| **稳定版** | MajdataHub 同款 CNB `MajdataPlay_Build` | 逐文件并发下载、独立校验与续传 |
+| **测试版 nightly** | `TeamMajdata/MajdataPlay` | Fast 加速下载完整 nightly ZIP、解压后清理 |
 
 稳定版和测试版可以分别设置并记住目录。首次下载当前版本时选择的目录会成为该版本的默认目录；之后切换到另一个版本时，程序会先检查那个版本目录里是否已有游戏：
 
@@ -84,15 +122,17 @@ Windows 10/11 可直接运行，无需单独安装 .NET。程序界面使用 Web
 
 ![下载线路锁定与回退](docs/assets/feature-network.svg)
 
-- 大型游戏包会测试 `ghfast.top`、`gh-proxy.com`、`ghproxy.net` 与 GitHub 直连。
-- 游戏管理可选择 `Fast`（默认）、`Proxy`、`Mirror` 或自动测速；默认优先 Fast。
-- 选中线路后锁定使用该线路，所有分片都走同一线路，不再每个分片轮换镜像。
-- 当前线路短暂中断时，会等待并利用已有分片继续下载；下载任务没有总重试轮数上限。
-- 只有当前线路持续无进度，才切换到其它线路；切换时保留已完成分片并继续续传。
-- 游戏包下载或应用更新会一直运行，直到包完整、长度校验成功并安全替换为止。只有你主动停止、关闭程序，或遇到磁盘空间/文件权限等无法恢复的错误才会结束。
+- 稳定版固定使用 MajdataHub 同款 CNB 仓库，逐文件并发下载并校验；不会再因单个大 ZIP 在 300 MB 断流而整体重来。
+- 测试版继续使用 `ghfast.top` 为默认 Fast，`gh-proxy.com` 等作为候选；网络波动时优先重连当前线路。
+- 稳定版固定 CNB 逐文件，不受 GitHub 镜像下拉影响；测试版可选择 Fast、Proxy、Mirror 或自动测速。
+- 测试版 Fast 默认使用 `ghfast.top`；连续失败后才切换 `gh-proxy.com` 等候选，单次网络波动不换镜像。
+- 稳定版清单与单文件均来自 CNB，每个文件按 SHA-256 校验；已完成文件会跳过。
+- 测试版下载完整 nightly ZIP，校验、解压并安全替换后删除临时包。
+- 测试版当前线路短暂中断时优先重连当前线路；连续失败后才切换候选。
+- 游戏下载或更新持续运行，直到文件齐全、长度/哈希校验成功并安全替换为止。
 - 谱面索引与资源下载会优先测试 Majdata 本站和同源镜像，自动回退主站。
 
-镜像只是在程序中替换 GitHub 下载地址，不会安装、启动或接管系统代理。能否连接仍取决于本机网络、DNS、防火墙和镜像站状态。
+镜像只是在测试版下载中替换 GitHub 下载地址，不会安装、启动或接管系统代理。能否连接仍取决于本机网络、DNS、防火墙和镜像站状态。
 
 ## 在线缓存
 
@@ -106,7 +146,7 @@ Windows 10/11 可直接运行，无需单独安装 .NET。程序界面使用 Web
 
 ## 皮肤与设置
 
-![设置、高级设置与缓存](docs/assets/feature-settings.svg)
+![设置、高级设置与缓存](docs/assets/screenshots/settings.png)
 
 - 皮肤页可读取社区皮肤列表，下载、重装并直接应用 `Display.Skin`。
 - 常用设置支持并行任务数、PV 视频、自动检查、谱面镜像和存放位置。

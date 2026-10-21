@@ -20,6 +20,11 @@ if (-not (Test-Path -LiteralPath $manual)) {
 }
 Copy-Item -LiteralPath $manual -Destination (Join-Path $output 'MajdataSync-Manual.html') -Force
 
+$screenshots = Join-Path $PSScriptRoot 'docs\assets\screenshots'
+if (Test-Path -LiteralPath $screenshots) {
+    Copy-Item -LiteralPath $screenshots -Destination $output -Recurse -Force
+}
+
 $web = Join-Path $output 'Web'
 if (-not (Test-Path $web)) {
     throw "Published output is missing the Web folder: $web"
