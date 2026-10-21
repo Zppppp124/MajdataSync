@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="700" viewBox="0 0 1400 700">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#eef9ff"/><stop offset="1" stop-color="#f9fcff"/></linearGradient>
+    <linearGradient id="blue" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#a9e4f5"/><stop offset="1" stop-color="#6cc4df"/></linearGradient>
+  </defs>
+  <rect width="1400" height="700" rx="30" fill="url(#bg)"/>
+  <g font-family="Microsoft YaHei UI, Segoe UI, sans-serif">
+    <text x="75" y="72" fill="#3e7892" font-size="34" font-weight="700">游戏管理：稳定版与测试版，一键切换</text>
+    <text x="75" y="108" fill="#83a3b5" font-size="18">程序文件会替换，曲目、皮肤、缓存和设置不会丢。</text>
+    <g transform="translate(70 148)">
+      <rect width="600" height="480" rx="22" fill="#fff" stroke="#dbebf3" stroke-width="2"/>
+      <circle cx="54" cy="54" r="24" fill="#e1f7ff"/>
+      <path d="M43 54h22M54 43v22" stroke="#50b4d5" stroke-width="4" stroke-linecap="round"/>
+      <text x="94" y="47" fill="#4f778d" font-size="23" font-weight="700">MajdataPlay</text>
+      <text x="94" y="76" fill="#8ca8b7" font-size="14">已安装，可以启动或检查更新</text>
+      <rect x="34" y="112" width="532" height="92" rx="14" fill="#f5fbfe" stroke="#e1eef4"/>
+      <text x="54" y="144" fill="#537b91" font-size="17" font-weight="700">游戏版本</text>
+      <text x="54" y="171" fill="#8ba7b6" font-size="13">稳定版固定从 MajdataPlay_Build 获取</text>
+      <rect x="402" y="132" width="143" height="44" rx="9" fill="#e9f6fc" stroke="#cfe6f0"/>
+      <text x="424" y="160" fill="#517b91" font-size="15">稳定版</text>
+      <path d="m520 150 6 6 6-6" stroke="#6b97ac" stroke-width="2.5" fill="none"/>
+      <text x="54" y="218" fill="#537b91" font-size="17" font-weight="700">完整游戏包</text>
+      <text x="54" y="244" fill="#8ba7b6" font-size="13">断点续传 · 自动镜像测速</text>
+      <rect x="402" y="209" width="143" height="40" rx="9" fill="#55bddf"/>
+      <text x="434" y="235" fill="#fff" font-size="15" font-weight="600">重新安装</text>
+      <rect x="34" y="274" width="532" height="110" rx="14" fill="#eef9fd" stroke="#d7edf5"/>
+      <text x="54" y="310" fill="#4f778d" font-size="18" font-weight="700">正在下载 MajdataPlay 测试版</text>
+      <text x="54" y="336" fill="#6e93a6" font-size="14">锁定线路：Proxy 加速 · 182.6 MB / 265.9 MB</text>
+      <rect x="54" y="353" width="455" height="9" rx="5" fill="#d6eaf3"/>
+      <rect x="54" y="353" width="310" height="9" rx="5" fill="#55bddf"/>
+      <text x="515" y="362" fill="#5c9fb8" font-size="12">68%</text>
+      <rect x="34" y="407" width="248" height="42" rx="10" fill="#eff9fd" stroke="#d9eaf2"/>
+      <text x="56" y="434" fill="#547d92" font-size="14">打开游戏目录</text>
+      <rect x="300" y="407" width="266" height="42" rx="10" fill="#eff9fd" stroke="#d9eaf2"/>
+      <text x="322" y="434" fill="#547d92" font-size="14">检查游戏更新</text>
+    </g>
+    <g transform="translate(700 148)">
+      <rect width="630" height="480" rx="22" fill="#fff" stroke="#dbebf3" stroke-width="2"/>
+      <text x="35" y="50" fill="#4f778d" font-size="23" font-weight="700">启动与缓存</text>
+      <text x="35" y="80" fill="#8ca8b7" font-size="14">渲染 API、编辑模式与测试模式都能直接选择。</text>
+      <rect x="30" y="109" width="570" height="96" rx="14" fill="#f7fcff" stroke="#e1eef4"/>
+      <text x="50" y="141" fill="#537b91" font-size="16" font-weight="700">游戏启动</text>
+      <text x="50" y="169" fill="#91aab8" font-size="13">选择 D3D11 / D3D12 / OpenGL / Vulkan</text>
+      <rect x="394" y="130" width="180" height="42" rx="9" fill="#eaf6fc" stroke="#d0e5ef"/>
+      <text x="417" y="157" fill="#5e879c" font-size="14">默认渲染</text>
+      <path d="m545 148 6 6 6-6" stroke="#719bad" stroke-width="2.5" fill="none"/>
+      <rect x="30" y="222" width="570" height="98" rx="14" fill="#f7fcff" stroke="#e1eef4"/>
+      <text x="50" y="255" fill="#537b91" font-size="16" font-weight="700">存放位置</text>
+      <text x="50" y="283" fill="#91aab8" font-size="13">本地曲目库 / 在线缓存 / 两者同时写入</text>
+      <rect x="394" y="244" width="180" height="42" rx="9" fill="#eaf6fc" stroke="#d0e5ef"/>
+      <text x="416" y="271" fill="#5e879c" font-size="14">本地 + 缓存</text>
+      <rect x="30" y="337" width="570" height="104" rx="14" fill="#eefaff" stroke="#d9edf5"/>
+      <circle cx="65" cy="375" r="19" fill="#dff5ff"/>
+      <path d="M56 375h18m-9-9v18" stroke="#53b2d3" stroke-width="3" stroke-linecap="round"/>
+      <text x="96" y="373" fill="#4e7a90" font-size="17" font-weight="700">在线缓存</text>
+      <text x="96" y="400" fill="#88a6b7" font-size="13">把已下载曲目预热到 Cache\Net\MajdataNET</text>
+      <text x="483" y="390" fill="#4ca6c5" font-size="14" font-weight="700">开始预热</text>
+    </g>
+    <g transform="translate(75 650)">
+      <circle cx="8" cy="-5" r="5" fill="#65bf83"/>
+      <text x="24" y="0" fill="#6f95a8" font-size="15">切换版本时保留：MaiCharts · Skins · Cache · RecordOutputs · Logs · settings.json</text>
+    </g>
+  </g>
+</svg>

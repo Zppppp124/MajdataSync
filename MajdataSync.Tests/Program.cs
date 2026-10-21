@@ -197,6 +197,20 @@ internal static class Program
             Assert(Directory.Exists(Path.Combine(switchTarget, "game-libs")),
                 "Channel switch should install new game directories");
 
+            var routeDestination = Path.Combine(testRoot, "route-resume.zip");
+            GitHubAcceleratedDownloader.WriteRouteMarker(
+                routeDestination,
+                ("Proxy 加速", "https://gh-proxy.com/https://github.com/example.zip"));
+            var routeMarker = GitHubAcceleratedDownloader.ReadRouteMarkerForTest(routeDestination);
+            Assert(routeMarker is not null &&
+                   routeMarker.Value.Label == "Proxy 加速" &&
+                   routeMarker.Value.Url.StartsWith("https://gh-proxy.com/", StringComparison.Ordinal),
+                "Resume marker should keep the selected route across app restarts");
+            Assert(MainWindow.IsTemporaryLaunchDirectory(Path.Combine(Path.GetTempPath(), "MajdataSyncTempTest")),
+                "Temporary launch directory should require an unpack warning");
+            Assert(!MainWindow.IsTemporaryLaunchDirectory(AppContext.BaseDirectory),
+                "Normal application directory should not be treated as temporary");
+
             var invalidStage = Path.Combine(testRoot, "InvalidStage");
             Directory.CreateDirectory(invalidStage);
             File.WriteAllBytes(Path.Combine(invalidStage, "MajdataPlay.exe"), []);

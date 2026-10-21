@@ -23,15 +23,16 @@ jobs:
         run: |
           $version = ([xml](Get-Content -LiteralPath .\MajdataSync.csproj)).Project.PropertyGroup.Version
           Compress-Archive -Path .\publish\* -DestinationPath ".\MajdataSync-win-x64-v$version.zip"
+          Copy-Item -LiteralPath .\docs\MajdataSync-Manual.html -Destination ".\MajdataSync-Manual.html" -Force
           Write-Output "RELEASE_ASSET=MajdataSync-win-x64-v$version.zip" >> $env:GITHUB_ENV
       - name: Upload release asset
         uses: softprops/action-gh-release@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          name: Majdata Sync v1.8.2
+          name: Majdata Sync v1.9.0
           body: |
-            ## Majdata Sync v1.8.2
+            ## Majdata Sync v1.9.0
 
             本次发布包含完整的 Windows x64 自包含版本，无需单独安装 .NET。
 
@@ -45,7 +46,11 @@ jobs:
             - 测试版更新改为下载完整 nightly 包后安全替换程序文件
             - 修复稳定版续传时异常小文件可能中断安装的问题
             - 测试版完整包测速后锁定最快线路，避免下载中在多个镜像间无意义切换
-          files: ${{ env.RELEASE_ASSET }}
+            - README 改为图文说明，并新增离线单文件 HTML 使用手册
+            - 增加临时目录启动提示和线路标记持久化
+          files: |
+            ${{ env.RELEASE_ASSET }}
+            MajdataSync-Manual.html
           fail_on_unmatched_files: true
           overwrite_files: true
           generate_release_notes: true

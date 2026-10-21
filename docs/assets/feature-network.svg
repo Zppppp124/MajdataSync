@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="700" viewBox="0 0 1400 700">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#effaff"/><stop offset="1" stop-color="#f8fbff"/></linearGradient>
+  </defs>
+  <rect width="1400" height="700" rx="30" fill="url(#bg)"/>
+  <g font-family="Microsoft YaHei UI, Segoe UI, sans-serif">
+    <text x="75" y="72" fill="#3e7892" font-size="34" font-weight="700">网络加速：测速一次，稳定跑到底</text>
+    <text x="75" y="108" fill="#83a3b5" font-size="18">选中最快线路后持续使用；短暂波动会继续等待并从断点续传。</text>
+    <g transform="translate(70 150)">
+      <rect width="610" height="475" rx="22" fill="#fff" stroke="#dbebf3" stroke-width="2"/>
+      <text x="34" y="48" fill="#4f778d" font-size="23" font-weight="700">线路测速</text>
+      <text x="34" y="78" fill="#8ca8b7" font-size="14">实时测试可连接线路，优先使用实际吞吐更高的线路。</text>
+      <g transform="translate(32 106)">
+        <rect width="546" height="72" rx="13" fill="#eaf9ff" stroke="#86d1e5" stroke-width="2"/>
+        <circle cx="35" cy="36" r="13" fill="#57bdda"/>
+        <path d="m29 36 5 5 9-11" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round"/>
+        <text x="65" y="30" fill="#48778f" font-size="16" font-weight="700">Proxy 加速</text>
+        <text x="65" y="51" fill="#78a1b4" font-size="12">gh-proxy.com · 当前锁定</text>
+        <text x="424" y="38" fill="#41a8c8" font-size="17" font-weight="700">12.4 MB/s</text>
+      </g>
+      <g transform="translate(32 190)">
+        <rect width="546" height="64" rx="13" fill="#f6fbfd" stroke="#e1eef4"/>
+        <circle cx="35" cy="32" r="11" fill="#b5dce9"/>
+        <text x="65" y="28" fill="#5e8296" font-size="15" font-weight="700">Fast 加速</text>
+        <text x="65" y="47" fill="#90aab8" font-size="12">ghfast.top · 备用线路</text>
+        <text x="424" y="34" fill="#7ca9ba" font-size="16" font-weight="600">8.1 MB/s</text>
+      </g>
+      <g transform="translate(32 267)">
+        <rect width="546" height="64" rx="13" fill="#f6fbfd" stroke="#e1eef4"/>
+        <circle cx="35" cy="32" r="11" fill="#d5e5ef"/>
+        <text x="65" y="28" fill="#5e8296" font-size="15" font-weight="700">Mirror 加速</text>
+        <text x="65" y="47" fill="#90aab8" font-size="12">ghproxy.net · 备用线路</text>
+        <text x="424" y="34" fill="#8aaebb" font-size="16" font-weight="600">2.2 MB/s</text>
+      </g>
+      <rect x="32" y="355" width="546" height="80" rx="13" fill="#eefaff" stroke="#d9edf5"/>
+      <text x="51" y="386" fill="#537b91" font-size="15" font-weight="700">下载中</text>
+      <text x="51" y="411" fill="#84a5b6" font-size="13">Proxy 加速 · 197.3 MB / 265.9 MB · 断点已保留</text>
+      <rect x="32" y="445" width="546" height="7" rx="4" fill="#dbeaf1"/>
+      <rect x="32" y="445" width="405" height="7" rx="4" fill="#57bddb"/>
+    </g>
+    <g transform="translate(715 150)">
+      <rect width="610" height="475" rx="22" fill="#fff" stroke="#dbebf3" stroke-width="2"/>
+      <text x="34" y="48" fill="#4f778d" font-size="23" font-weight="700">稳定与回退</text>
+      <text x="34" y="78" fill="#8ca8b7" font-size="14">这些规则可以避免中途无故切换线路或重复下载。</text>
+      <g transform="translate(32 112)">
+        <circle cx="20" cy="20" r="20" fill="#e4f8f2"/>
+        <path d="m12 20 6 6 11-13" stroke="#65b794" stroke-width="4" fill="none" stroke-linecap="round"/>
+        <text x="56" y="27" fill="#4e798f" font-size="17" font-weight="700">分片保留</text>
+        <text x="56" y="51" fill="#8aa7b7" font-size="13">已经完成的每个分片都留在磁盘，不会重新开始。</text>
+      </g>
+      <g transform="translate(32 202)">
+        <circle cx="20" cy="20" r="20" fill="#e4f8f2"/>
+        <path d="m12 20 6 6 11-13" stroke="#65b794" stroke-width="4" fill="none" stroke-linecap="round"/>
+        <text x="56" y="27" fill="#4e798f" font-size="17" font-weight="700">同线路续传</text>
+        <text x="56" y="51" fill="#8aa7b7" font-size="13">网络短暂中断会先重试当前线路，并继续未完成分片。</text>
+      </g>
+      <g transform="translate(32 292)">
+        <circle cx="20" cy="20" r="20" fill="#fff5dd"/>
+        <path d="M20 9v13m0 5v1" stroke="#e6b45f" stroke-width="4" fill="none" stroke-linecap="round"/>
+        <text x="56" y="27" fill="#4e798f" font-size="17" font-weight="700">逐级回退</text>
+        <text x="56" y="51" fill="#8aa7b7" font-size="13">当前线路持续失败后才尝试其它加速线路。</text>
+      </g>
+      <g transform="translate(32 382)">
+        <circle cx="20" cy="20" r="20" fill="#eaf4ff"/>
+        <path d="M20 10v13m0 5v1" stroke="#7fa9d2" stroke-width="4" fill="none" stroke-linecap="round"/>
+        <text x="56" y="27" fill="#4e798f" font-size="17" font-weight="700">不修改系统网络</text>
+        <text x="56" y="51" fill="#8aa7b7" font-size="13">镜像作为普通 HTTPS 地址请求，不接管系统代理。</text>
+      </g>
+    </g>
+  </g>
+</svg>

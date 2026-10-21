@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="700" viewBox="0 0 1400 700">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#eef9ff"/><stop offset="1" stop-color="#fcfdff"/></linearGradient>
+  </defs>
+  <rect width="1400" height="700" rx="30" fill="url(#bg)"/>
+  <g font-family="Microsoft YaHei UI, Segoe UI, sans-serif">
+    <text x="75" y="72" fill="#3e7892" font-size="34" font-weight="700">设置与缓存：把习惯留在本机</text>
+    <text x="75" y="108" fill="#83a3b5" font-size="18">下载并发、PV 视频、自动检查、存放目标与高级设置都在这里。</text>
+    <g transform="translate(70 150)">
+      <rect width="610" height="475" rx="22" fill="#fff" stroke="#dbebf3" stroke-width="2"/>
+      <text x="34" y="48" fill="#4f778d" font-size="23" font-weight="700">下载偏好</text>
+      <text x="34" y="78" fill="#8ca8b7" font-size="14">设置会自动保存，并用于后续同步任务。</text>
+      <rect x="30" y="107" width="550" height="76" rx="13" fill="#f7fcff" stroke="#e1eef4"/>
+      <text x="50" y="138" fill="#537b91" font-size="16" font-weight="700">并行任务</text>
+      <text x="50" y="162" fill="#90aab8" font-size="12">1 到 12 之间调整，默认 6</text>
+      <rect x="411" y="127" width="143" height="36" rx="8" fill="#e8f7fd" stroke="#cde6f0"/>
+      <text x="435" y="151" fill="#4d91ad" font-size="15" font-weight="700">6 首并行</text>
+      <rect x="30" y="198" width="550" height="70" rx="13" fill="#f7fcff" stroke="#e1eef4"/>
+      <text x="50" y="228" fill="#537b91" font-size="16" font-weight="700">下载 PV 视频</text>
+      <text x="50" y="252" fill="#90aab8" font-size="12">关闭后仅下载谱面必需资源</text>
+      <rect x="502" y="216" width="52" height="29" rx="15" fill="#66bedc"/>
+      <circle cx="539" cy="230" r="11" fill="#fff"/>
+      <rect x="30" y="283" width="550" height="72" rx="13" fill="#f7fcff" stroke="#e1eef4"/>
+      <text x="50" y="314" fill="#537b91" font-size="16" font-weight="700">自动检查新谱面</text>
+      <text x="50" y="338" fill="#90aab8" font-size="12">启动时检查站点索引与本地差异</text>
+      <rect x="502" y="302" width="52" height="29" rx="15" fill="#66bedc"/>
+      <circle cx="539" cy="316" r="11" fill="#fff"/>
+      <rect x="30" y="370" width="550" height="78" rx="13" fill="#eefaff" stroke="#d9edf5"/>
+      <text x="50" y="401" fill="#537b91" font-size="16" font-weight="700">存放目标</text>
+      <text x="50" y="425" fill="#90aab8" font-size="12">本地曲目 / 在线缓存 / 两者同时</text>
+      <rect x="390" y="388" width="164" height="40" rx="9" fill="#fff" stroke="#cfe5ef"/>
+      <text x="410" y="414" fill="#5b859a" font-size="14">本地 + 缓存</text>
+    </g>
+    <g transform="translate(715 150)">
+      <rect width="610" height="475" rx="22" fill="#fff" stroke="#dbebf3" stroke-width="2"/>
+      <text x="34" y="48" fill="#4f778d" font-size="23" font-weight="700">高级设置</text>
+      <text x="34" y="78" fill="#8ca8b7" font-size="14">用于修改 MajdataPlay 的 settings.json 字段。</text>
+      <rect x="30" y="108" width="550" height="52" rx="11" fill="#f1faff" stroke="#d8ebf3"/>
+      <circle cx="55" cy="134" r="9" fill="#87c8de"/>
+      <text x="77" y="140" fill="#7e9daf" font-size="14">搜索设置，例如 Volume、Debug、皮肤</text>
+      <text x="34" y="198" fill="#537b91" font-size="16" font-weight="700">Display · Skin</text>
+      <rect x="30" y="212" width="550" height="48" rx="9" fill="#f8fcff" stroke="#e1eef4"/>
+      <text x="48" y="243" fill="#6b8fa2" font-size="14">default</text>
+      <text x="34" y="294" fill="#537b91" font-size="16" font-weight="700">Online · ApiEndpoints</text>
+      <rect x="30" y="309" width="550" height="74" rx="9" fill="#f8fcff" stroke="#e1eef4"/>
+      <text x="48" y="337" fill="#6b8fa2" font-size="13">Name: MajdataNET</text>
+      <text x="48" y="360" fill="#6b8fa2" font-size="13">Url: https://majdata.net/api3/api/</text>
+      <rect x="30" y="402" width="550" height="48" rx="10" fill="#55bddf"/>
+      <text x="241" y="433" fill="#fff" font-size="16" font-weight="700">保存高级设置</text>
+    </g>
+    <g transform="translate(75 652)">
+      <circle cx="8" cy="-5" r="5" fill="#65bf83"/>
+      <text x="24" y="0" fill="#6f95a8" font-size="15">缓存位置：Cache\Net\MajdataNET　·　日志位置：%LOCALAPPDATA%\MajdataSync\logs</text>
+    </g>
+  </g>
+</svg>

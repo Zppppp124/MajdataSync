@@ -14,6 +14,12 @@ if ($null -ne $launcher) {
 
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'Assets\app.ico') -Destination (Join-Path $output 'app.ico') -Force
 
+$manual = Join-Path $PSScriptRoot 'docs\MajdataSync-Manual.html'
+if (-not (Test-Path -LiteralPath $manual)) {
+    throw "Release manual is missing: $manual"
+}
+Copy-Item -LiteralPath $manual -Destination (Join-Path $output 'MajdataSync-Manual.html') -Force
+
 $web = Join-Path $output 'Web'
 if (-not (Test-Path $web)) {
     throw "Published output is missing the Web folder: $web"

@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Majdata Sync 使用说明书</title>
+  <style>
+    :root {
+      --bg: #eef9ff;
+      --paper: #ffffff;
+      --ink: #315b72;
+      --text: #54798d;
+      --muted: #7d9cad;
+      --line: #d9eaf3;
+      --blue: #55bddf;
+      --blue-soft: #e9f8ff;
+      --cyan-soft: #eaf9ff;
+      --pink-soft: #fff2f7;
+      --green: #59a982;
+      --radius: 18px;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background:
+        radial-gradient(circle at 10% 3%, rgba(153, 224, 247, .35), transparent 24rem),
+        radial-gradient(circle at 92% 28%, rgba(207, 218, 255, .42), transparent 28rem),
+        var(--bg);
+      color: var(--text);
+      font: 16px/1.75 "Microsoft YaHei UI", "Segoe UI", sans-serif;
+    }
+    a { color: #2987aa; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .shell {
+      display: grid;
+      grid-template-columns: 250px minmax(0, 1fr);
+      max-width: 1480px;
+      margin: 0 auto;
+      min-height: 100vh;
+    }
+    aside {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      padding: 28px 20px;
+      background: rgba(248, 253, 255, .9);
+      border-right: 1px solid var(--line);
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 26px;
+    }
+    .brand img { width: 52px; height: 52px; object-fit: cover; border-radius: 50%; border: 2px solid #9fddeb; }
+    .brand strong { display: block; color: #39677f; font-size: 15px; letter-spacing: 1px; }
+    .brand span { display: block; color: var(--muted); font-size: 12px; }
+    nav { display: grid; gap: 5px; }
+    nav a { padding: 8px 12px; border-radius: 8px; color: #557b8e; font-size: 14px; }
+    nav a:hover { background: var(--blue-soft); text-decoration: none; }
+    .aside-note { margin-top: 26px; padding: 13px; border: 1px solid var(--line); border-radius: 12px; background: #fff; color: var(--muted); font-size: 12px; line-height: 1.7; }
+    main { min-width: 0; padding: 34px 38px 90px; }
+    .hero {
+      overflow: hidden;
+      border: 1px solid #cfe9f2;
+      border-radius: 24px;
+      background: #fff;
+      box-shadow: 0 18px 50px rgba(79, 143, 169, .09);
+    }
+    .hero > img { display: block; width: 100%; height: auto; aspect-ratio: 1600 / 720; object-fit: cover; }
+    .hero-copy { display: flex; align-items: flex-start; justify-content: space-between; gap: 22px; padding: 24px 28px; }
+    .hero-copy h1 { margin: 0 0 8px; color: var(--ink); font-size: 30px; line-height: 1.35; }
+    .hero-copy p { margin: 0; color: #7a9bac; font-size: 14px; }
+    .version { flex: 0 0 auto; padding: 7px 12px; border: 1px solid #c3e5ef; border-radius: 999px; background: var(--cyan-soft); color: #3a93b0; font-size: 13px; font-weight: 700; white-space: nowrap; }
+    .quick-actions { display: flex; flex-wrap: wrap; gap: 10px; padding: 0 28px 27px; }
+    .button { display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; border-radius: 8px; background: var(--blue); color: #fff; font-size: 14px; font-weight: 700; }
+    .button.secondary { border: 1px solid #cce5ef; background: #f5fbfe; color: #4d8198; }
+    section { margin-top: 26px; padding: 28px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--paper); box-shadow: 0 8px 28px rgba(91, 153, 178, .045); }
+    h2 { margin: 0 0 14px; color: var(--ink); font-size: 24px; line-height: 1.35; }
+    h3 { margin: 24px 0 8px; color: #467188; font-size: 17px; }
+    p { margin: 9px 0; }
+    .lead { color: #7394a5; font-size: 15px; }
+    .figure { display: block; width: 100%; height: auto; margin: 18px 0; border: 1px solid #dcecf3; border-radius: 14px; background: #fbfdff; }
+    .steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 18px 0; }
+    .step { padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: #f8fcff; }
+    .step b { display: inline-grid; width: 25px; height: 25px; margin-bottom: 8px; place-items: center; border-radius: 50%; background: var(--blue-soft); color: #3e9fbd; }
+    .step strong { display: block; color: #4e778c; font-size: 14px; }
+    .step span { display: block; margin-top: 4px; color: var(--muted); font-size: 13px; line-height: 1.7; }
+    .callout { margin: 16px 0; padding: 14px 16px; border-left: 4px solid #75c7de; border-radius: 0 9px 9px 0; background: var(--cyan-soft); color: #628596; font-size: 14px; }
+    .callout.warn { border-left-color: #e6b45f; background: #fff8e9; }
+    .callout.good { border-left-color: #77c69d; background: #effbf5; }
+    table { width: 100%; border-collapse: collapse; margin: 15px 0; font-size: 14px; }
+    th, td { padding: 11px 12px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { background: #f2fbff; color: #4f778c; font-weight: 700; }
+    td:first-child { color: #467188; font-weight: 700; }
+    code { padding: 2px 5px; border-radius: 4px; background: #eff8fc; color: #3e7f98; font-family: Consolas, monospace; font-size: .9em; }
+    pre { overflow: auto; margin: 14px 0; padding: 16px; border: 1px solid var(--line); border-radius: 10px; background: #f6fbfe; color: #52778c; font: 13px/1.7 Consolas, monospace; }
+    .cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 16px 0; }
+    .card { padding: 16px; border: 1px solid var(--line); border-radius: 11px; background: #f9fdff; }
+    .card strong { display: block; color: #4f778c; }
+    .card span { display: block; margin-top: 4px; color: var(--muted); font-size: 13px; }
+    footer { padding: 28px 4px 0; color: var(--muted); font-size: 13px; text-align: center; }
+    @media (max-width: 960px) {
+      .shell { display: block; }
+      aside { position: static; height: auto; padding: 18px 20px; border-right: 0; border-bottom: 1px solid var(--line); }
+      nav { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+      nav a { padding: 7px 8px; font-size: 12px; text-align: center; }
+      .aside-note { display: none; }
+      main { padding: 18px 16px 60px; }
+      .hero-copy { padding: 19px; }
+      .hero-copy h1 { font-size: 24px; }
+      .quick-actions { padding: 0 19px 20px; }
+      section { padding: 20px; }
+    }
+    @media (max-width: 540px) {
+      html, body { overflow-x: hidden; }
+      .shell, main, section, .hero { min-width: 0; max-width: 100%; }
+      .brand { margin-bottom: 16px; }
+      nav { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .hero-copy { display: block; }
+      .version { display: inline-block; margin-top: 10px; }
+      .hero > img { height: 210px; object-fit: cover; object-position: 18% center; }
+      .steps, .cards { grid-template-columns: 1fr; }
+      h2 { font-size: 21px; }
+      table, thead, tbody, th, td, tr { display: block; }
+      thead { display: none; }
+      tr { margin-bottom: 10px; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; }
+      td { border-bottom: 1px solid var(--line); }
+      td:last-child { border-bottom: 0; }
+      pre { white-space: pre-wrap; word-break: break-word; }
+      p, li, td, code { overflow-wrap: anywhere; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <aside>
+      <div class="brand">
+        <img src="{{SALT_AVATAR}}" alt="盐">
+        <div><strong>MAJDATA SYNC</strong><span>使用说明书 · v1.9.0</span></div>
+      </div>
+      <nav>
+        <a href="#start">快速开始</a>
+        <a href="#library">曲目库</a>
+        <a href="#game">游戏管理</a>
+        <a href="#network">网络与续传</a>
+        <a href="#cache">缓存与皮肤</a>
+        <a href="#settings">高级设置</a>
+        <a href="#files">文件与日志</a>
+        <a href="#faq">常见问题</a>
+      </nav>
+      <div class="aside-note">这是一份离线说明书。所有图片都已内嵌，不需要联网也能查看。</div>
+    </aside>
+    <main>
+      <div class="hero">
+        <img src="{{HERO}}" alt="Majdata Sync 曲目库示意图">
+        <div class="hero-copy">
+          <div>
+            <h1>给喜欢的谱面，点一个大大的赞吧</h1>
+            <p>从 majdata.net 找谱面，勾选后批量下载；每完成一首就立即入库，中断也不白下。</p>
+          </div>
+          <span class="version">v1.9.0 · Windows x64</span>
+        </div>
+        <div class="quick-actions">
+          <a class="button" href="https://github.com/Zppppp124/MajdataSync/releases/latest">下载最新版本</a>
+          <a class="button secondary" href="#start">先看快速开始</a>
+        </div>
+      </div>
+
+      <section id="start">
+        <h2>快速开始</h2>
+        <p class="lead">第一次使用只需要完成一次目录识别；之后打开软件就能继续同步。</p>
+        <div class="steps">
+          <div class="step"><b>1</b><strong>解压并运行</strong><span>把发布包解压到普通文件夹，双击 <code>MajdataSync.exe</code>。不要直接在压缩包临时目录里运行。</span></div>
+          <div class="step"><b>2</b><strong>识别 Original</strong><span>选择游戏根目录或 <code>MaiCharts\Original</code>，程序会自动定位谱面目录，不绑定盘符。</span></div>
+          <div class="step"><b>3</b><strong>读取索引</strong><span>点击刷新索引。已有缓存会快速显示；首次建立完整曲库需要等待一段时间。</span></div>
+        </div>
+        <div class="callout good"><strong>建议：</strong>批量下载或切换游戏版本前先关闭 MajdataPlay，避免曲目库正在读取文件时产生占用。</div>
+      </section>
+
+      <section id="library">
+        <h2>曲目库：勾选、下载、更新</h2>
+        <img class="figure" src="{{LIBRARY}}" alt="曲目库勾选与批量的示意图">
+        <h3>三种下载方式</h3>
+        <div class="cards">
+          <div class="card"><strong>同步新谱面</strong><span>只选尚未下载，或站点哈希已经变化的新版本。</span></div>
+          <div class="card"><strong>下载所选</strong><span>给曲目卡左上角打勾，再按顶部“下载所选”，只处理勾选曲目。</span></div>
+          <div class="card"><strong>下载全部/筛选结果</strong><span>适合按日期或搜索条件补抓整个时间段的谱面。</span></div>
+          <div class="card"><strong>导入 ZIP</strong><span>把本地 ZIP 以文件名建立曲目目录，并展开零散文件。</span></div>
+        </div>
+        <div class="callout"><strong>逐首入库：</strong>每首下载成功后立即写入同步索引。即使后续任务中断，已完成的曲目仍然保留，不需要整批重下。</div>
+        <h3>日期更新</h3>
+        <p>点击“按日期更新”，选择上传日期区间并决定是否只同步新版本。适合补抓某次活动、某个发布时间段的曲目。</p>
+      </section>
+
+      <section id="game">
+        <h2>游戏管理：稳定版与测试版</h2>
+        <img class="figure" src="{{GAME}}" alt="游戏管理与版本切换示意图">
+        <table>
+          <thead><tr><th>通道</th><th>来源</th><th>更新方式</th></tr></thead>
+          <tbody>
+            <tr><td>稳定版</td><td>TeamMajdata/MajdataPlay_Build</td><td>逐文件校验、下载和断点续传</td></tr>
+            <tr><td>测试版</td><td>TeamMajdata/MajdataPlay 的 nightly</td><td>完整 nightly 包下载后安全替换程序文件</td></tr>
+          </tbody>
+        </table>
+        <p>切换版本时会保留 <code>MaiCharts</code>、<code>Skins</code>、<code>Cache</code>、<code>RecordOutputs</code>、<code>Logs</code> 与 <code>settings.json</code>。只需要替换游戏程序本身。</p>
+        <div class="callout warn"><strong>不要在压缩包临时目录运行：</strong>从 WinRAR 等临时目录直接双击时，解压软件可能在下载期间清理目录，窗口会突然消失。请先完整解压，再运行 <code>MajdataSync.exe</code>。</div>
+        <h3>启动与编辑</h3>
+        <p>启动区可以选择 D3D11、D3D12、OpenGL、Vulkan，或进入测试/谱面编辑模式。没有特殊需要时保持默认即可。</p>
+      </section>
+
+      <section id="network">
+        <h2>网络与续传：线路锁定，不做无意义切换</h2>
+        <img class="figure" src="{{NETWORK}}" alt="网络线路锁定与回退示意图">
+        <h3>大型游戏包</h3>
+        <p>程序会测试 Fast、Proxy、Mirror 与 GitHub 直连。成功选中线路后，全部分片都固定使用该线路；短暂中断会等待并继续从已完成字节续传。</p>
+        <h3>谱面下载</h3>
+        <p>谱面索引与资源下载会优先测试 Majdata 本站和同源镜像，选择低延迟线路。镜像不可用时会回退主站，并逐曲目校验必需文件。</p>
+        <div class="callout"><strong>断点会保留：</strong>未完成的临时文件保留在目标曲目目录或游戏安装目录的隐藏工作位置。重新开始时会尽量复用已有进度。</div>
+        <div class="callout warn"><strong>镜像不是系统代理：</strong>程序只是把 GitHub 下载地址换成普通 HTTPS 镜像地址，不安装或接管系统代理。能否访问仍取决于本机网络、防火墙和镜像站状态。</div>
+      </section>
+
+      <section id="cache">
+        <h2>在线缓存与皮肤</h2>
+        <h3>本地曲目库与在线缓存</h3>
+        <p>顶部“存放位置”可以选：</p>
+        <ul>
+          <li><strong>本地 + 在线缓存：</strong>同时写入 <code>Original</code> 和游戏缓存。</li>
+          <li><strong>仅本地曲目库：</strong>只保留可直接游玩的本地谱面目录。</li>
+          <li><strong>仅在线缓存：</strong>只写入 <code>Cache\Net\MajdataNET</code>，适合减少本地曲目文件夹。</li>
+        </ul>
+        <p>“预热在线缓存”会把已经存在的本地曲目转换成游戏在线模式需要的缓存结构和 <code>.sha256</code> 校验文件。</p>
+        <h3>皮肤</h3>
+        <p>皮肤页读取社区皮肤列表，支持下载、重装和直接应用。应用皮肤只会更新 <code>settings.json</code> 里的 <code>Display.Skin</code>，不会覆盖其他设置。</p>
+      </section>
+
+      <section id="settings">
+        <h2>设置与高级设置</h2>
+        <img class="figure" src="{{SETTINGS}}" alt="设置、高级设置与缓存示意图">
+        <h3>常用偏好</h3>
+        <p>可以调整并行任务数、是否下载 PV、是否自动检查新谱面、是否启用谱面镜像以及默认存放位置。各项会自动保存。</p>
+        <h3>读取 settings.json</h3>
+        <p>进入游戏管理页后读取当前配置。内置编辑器显示常用字段；高级设置会列出未在内置表单出现的字段，并提供中文说明、默认值和有效值，支持搜索。</p>
+        <div class="callout"><strong>修改前建议：</strong>先关闭游戏。保存高级设置后，重新读取一次配置，确认字段已经写入。</div>
+      </section>
+
+      <section id="files">
+        <h2>文件结构与日志</h2>
+        <pre>Original
+└─ 曲名
+   ├─ maidata.txt
+   ├─ track.mp3
+   ├─ bg.jpg
+   ├─ pv.mp4
+   ├─ id
+   └─ .majdata-sync.json</pre>
+        <table>
+          <thead><tr><th>内容</th><th>位置</th></tr></thead>
+          <tbody>
+            <tr><td>本地曲目</td><td><code>MaiCharts\Original\曲名\</code></td></tr>
+            <tr><td>同步索引</td><td><code>Original\.majdata-sync-index.json</code></td></tr>
+            <tr><td>在线缓存</td><td><code>Cache\Net\MajdataNET</code></td></tr>
+            <tr><td>曲目索引缓存</td><td><code>%LOCALAPPDATA%\MajdataSync\catalog.json</code></td></tr>
+            <tr><td>运行日志</td><td><code>%LOCALAPPDATA%\MajdataSync\logs</code></td></tr>
+          </tbody>
+        </table>
+        <p>部分已有谱面使用 <code>track.opus</code> 或 <code>bg.png</code>。程序不会改动无关的现有曲目，只写入自己下载或导入的目录。</p>
+      </section>
+
+      <section id="faq">
+        <h2>常见问题</h2>
+        <h3>窗口下载到一半消失了</h3>
+        <p>先确认不是从 WinRAR 临时目录直接运行。新的发布版会把版本和运行路径写入日志。若仍出现，打开日志文件夹，查看同一时间点是否有 <code>Unhandled UI exception</code> 或运行路径在 <code>Temp\Rar$</code> 下。</p>
+        <h3>为什么下载速度会变慢？</h3>
+        <p>镜像站、CDN、本机网络和防火墙都会影响速度。程序会在线路短暂波动时继续等待和续传；只有当前线路持续失败时，才进入下一条线路。</p>
+        <h3>切换测试版会不会丢曲目？</h3>
+        <p>不会。切换版本只替换游戏程序文件，保留曲目、皮肤、缓存、成绩输出、日志和设置。仍建议切换前关闭游戏。</p>
+        <h3>索引第一次很慢</h3>
+        <p>首次需要建立完整站点索引。后续启动先显示本地缓存，再在后台校验更新，不需要每次等待完整索引。</p>
+        <h3>ZIP 导入失败</h3>
+        <p>确认压缩包包含 <code>maidata.txt</code>。程序会以 ZIP 文件名建立目录，并防止带有 <code>../</code> 的危险路径。</p>
+      </section>
+
+      <footer>
+        Majdata Sync 使用说明书 · v1.9.0 · 离线单文件版本<br>
+        谱面数据来自 majdata.net，游戏与构建包来自 TeamMajdata 官方仓库。
+      </footer>
+    </main>
+  </div>
+</body>
+</html>

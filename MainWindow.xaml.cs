@@ -18,6 +18,10 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        if (IsTemporaryLaunchDirectory(AppContext.BaseDirectory))
+        {
+            AppLogger.Write("Application launched from a temporary archive directory: " + AppContext.BaseDirectory);
+        }
         _webRoot = Path.Combine(AppContext.BaseDirectory, "Web");
         _controller = new AppController(this);
         Icon = BitmapFrame.Create(new Uri("pack://application:,,,/Assets/app.ico", UriKind.Absolute));
@@ -29,10 +33,37 @@ public partial class MainWindow : Window
         };
     }
 
+    public static bool IsTemporaryLaunchDirectory(string directory)
+    {
+        var normalized = Path.GetFullPath(directory).TrimEnd(
+            Path.DirectorySeparatorChar,
+            Path.AltDirectorySeparatorChar);
+        var temp = Path.GetFullPath(Path.GetTempPath()).TrimEnd(
+            Path.DirectorySeparatorChar,
+            Path.AltDirectorySeparatorChar);
+        return normalized.StartsWith(
+                   temp + Path.DirectorySeparatorChar,
+                   StringComparison.OrdinalIgnoreCase) ||
+               normalized.Contains(
+                   Path.Combine("Temp", "Rar$"),
+                   StringComparison.OrdinalIgnoreCase);
+    }
+
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
         try
         {
+            if (IsTemporaryLaunchDirectory(AppContext.BaseDirectory))
+            {
+                System.Windows.MessageBox.Show(
+                    "检测到你正在从压缩包临时目录运行 Majdata Sync。\n\n" +
+                    "请先把整个发布包解压到普通文件夹，再运行 MajdataSync.exe；" +
+                    "否则 Windows 或解压软件可能在下载途中清理临时文件，导致窗口消失。",
+                    "Majdata Sync",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+            }
+
             var dataFolder = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                 "MajdataSync");

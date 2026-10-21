@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="700" viewBox="0 0 1400 700">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#e8f8ff"/><stop offset="1" stop-color="#f8fdff"/></linearGradient>
+    <linearGradient id="sidebar" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#e4f5ff"/><stop offset="1" stop-color="#d7ebf8"/></linearGradient>
+  </defs>
+  <rect width="1400" height="700" rx="30" fill="url(#bg)"/>
+  <g font-family="Microsoft YaHei UI, Segoe UI, sans-serif">
+    <text x="75" y="72" fill="#3e7892" font-size="34" font-weight="700">曲目库：挑几首，再一起带回家</text>
+    <text x="75" y="108" fill="#83a3b5" font-size="18">勾选曲目后，只需要按一次「下载所选」。</text>
+    <g transform="translate(70 150)">
+      <rect width="1260" height="485" rx="22" fill="#fff" stroke="#d9eaf3" stroke-width="2"/>
+      <rect width="222" height="485" rx="22" fill="url(#sidebar)"/>
+      <rect x="24" y="28" width="174" height="50" rx="12" fill="#fff" opacity=".82"/>
+      <circle cx="51" cy="53" r="13" fill="#8ecce4"/>
+      <text x="74" y="60" fill="#52778d" font-size="17" font-weight="700">MAJDATA SYNC</text>
+      <g font-size="16">
+        <rect x="20" y="104" width="182" height="42" rx="10" fill="#fff"/>
+        <text x="42" y="131" fill="#4b7990" font-weight="600">曲目库</text>
+        <text x="42" y="181" fill="#7697a9">传输队列</text>
+        <text x="42" y="223" fill="#7697a9">游戏管理</text>
+        <text x="42" y="265" fill="#7697a9">皮肤</text>
+        <text x="42" y="307" fill="#7697a9">设置</text>
+      </g>
+      <rect x="20" y="365" width="182" height="92" rx="12" fill="#fff" opacity=".78"/>
+      <text x="38" y="391" fill="#8babbc" font-size="12">ORIGINAL 目录</text>
+      <text x="38" y="415" fill="#537d92" font-size="13">I:\majtest\MaiCharts...</text>
+      <text x="38" y="441" fill="#55aecd" font-size="13">选择目录</text>
+      <text x="254" y="57" fill="#537d92" font-size="23" font-weight="700">站点曲目</text>
+      <rect x="492" y="30" width="258" height="40" rx="10" fill="#f1faff" stroke="#d3e9f3"/>
+      <text x="512" y="56" fill="#9bb4c2" font-size="14">搜索标题、曲师、谱师</text>
+      <rect x="768" y="30" width="128" height="40" rx="10" fill="#eef8fc"/>
+      <text x="790" y="56" fill="#6f91a3" font-size="14">全部状态</text>
+      <rect x="914" y="30" width="148" height="40" rx="10" fill="#e9f7ff"/>
+      <text x="936" y="56" fill="#4a9fc1" font-size="14">刷新索引</text>
+      <rect x="1078" y="30" width="150" height="40" rx="10" fill="#55bddf"/>
+      <text x="1100" y="56" fill="#fff" font-size="14" font-weight="600">同步新谱面</text>
+      <rect x="254" y="94" width="974" height="48" rx="11" fill="#edf9fd" stroke="#d9edf5"/>
+      <text x="274" y="124" fill="#5b8499" font-size="14" font-weight="600">已选择 3 首曲目</text>
+      <text x="1096" y="124" fill="#459bbc" font-size="14" font-weight="700">下载所选</text>
+      <g transform="translate(254 162)">
+        <rect width="310" height="260" rx="14" fill="#f8fcff" stroke="#76c7e2" stroke-width="3"/>
+        <rect x="14" y="14" width="282" height="136" rx="10" fill="#c7eafa"/>
+        <circle cx="44" cy="44" r="15" fill="#fff"/>
+        <path d="m38 44 4 5 8-10" stroke="#50b5d7" stroke-width="3" fill="none" stroke-linecap="round"/>
+        <text x="28" y="183" fill="#4c768c" font-size="19" font-weight="700">Example Song</text>
+        <text x="28" y="211" fill="#86a4b4" font-size="14">Artist Name</text>
+        <text x="28" y="240" fill="#4ca9c9" font-size="14">EXP 13 · 已入库</text>
+      </g>
+      <g transform="translate(586 162)">
+        <rect width="310" height="260" rx="14" fill="#f8fcff" stroke="#76c7e2" stroke-width="3"/>
+        <rect x="14" y="14" width="282" height="136" rx="10" fill="#d6e9fb"/>
+        <circle cx="44" cy="44" r="15" fill="#fff"/>
+        <path d="m38 44 4 5 8-10" stroke="#50b5d7" stroke-width="3" fill="none" stroke-linecap="round"/>
+        <text x="28" y="183" fill="#4c768c" font-size="19" font-weight="700">Another Track</text>
+        <text x="28" y="211" fill="#86a4b4" font-size="14">Artist Name</text>
+        <text x="28" y="240" fill="#4ca9c9" font-size="14">MST 14 · 待同步</text>
+      </g>
+      <g transform="translate(918 162)">
+        <rect width="310" height="260" rx="14" fill="#f8fcff" stroke="#76c7e2" stroke-width="3"/>
+        <rect x="14" y="14" width="282" height="136" rx="10" fill="#f5dce7"/>
+        <circle cx="44" cy="44" r="15" fill="#fff"/>
+        <path d="m38 44 4 5 8-10" stroke="#50b5d7" stroke-width="3" fill="none" stroke-linecap="round"/>
+        <text x="28" y="183" fill="#4c768c" font-size="19" font-weight="700">Third Song</text>
+        <text x="28" y="211" fill="#86a4b4" font-size="14">Artist Name</text>
+        <text x="28" y="240" fill="#4ca9c9" font-size="14">BAS 7 · 有更新</text>
+      </g>
+      <text x="254" y="452" fill="#8ba6b6" font-size="14">已下载的曲目拥有绿色状态，站点版本变化时会显示更新标记。</text>
+      <rect x="254" y="468" width="974" height="1" fill="#e0eef5"/>
+    </g>
+  </g>
+</svg>

@@ -4,44 +4,106 @@
 [![release](https://img.shields.io/github/v/release/Zppppp124/MajdataSync?label=release)](https://github.com/Zppppp124/MajdataSync/releases/latest)
 [![download](https://img.shields.io/github/downloads/Zppppp124/MajdataSync/total?label=downloads)](https://github.com/Zppppp124/MajdataSync/releases/latest)
 
-Majdata Sync 是一个 Windows 桌面工具，用于从 [majdata.net](https://majdata.net) 下载 MajdataPlay 谱面，并整理为游戏可直接读取的目录结构。
+![Majdata Sync 曲目库](docs/assets/hero-sync.svg)
+
+**Majdata Sync** 是一个给 MajdataPlay 玩家使用的 Windows 曲库工具：从 [majdata.net](https://majdata.net) 找谱面，勾选后批量下载，自动整理成游戏可以直接读取的文件夹；同时还能管理游戏版本、在线缓存、皮肤和内置设置。
+
+它会自动识别游戏目录，不绑定盘符；每首曲目下载完成就立即入库，意外中断也不会把已经完成的曲目重下一遍。
+
+> 给喜欢的谱面，点一个大大的赞吧。
+
+## 亮点
+
+| 曲目库 | 游戏管理 | 网络与缓存 |
+| --- | --- | --- |
+| 勾选曲目后批量下载 | 稳定版 / 测试版切换 | 谱面本站与镜像优选 |
+| 每首完成立即入库 | 完整包断点续传 | 本地 / 在线缓存双写 |
+| 日期筛选与增量更新 | 启动、渲染 API、编辑模式 | 皮肤下载与直接应用 |
 
 ## 下载
 
-当前版本：**v1.8.2**
+当前版本：**v1.9.0**
 
-[下载 Windows x64 自包含版本](https://github.com/Zppppp124/MajdataSync/releases/download/v1.8.2/MajdataSync-win-x64-v1.8.2.zip)
+[**下载 Windows x64 自包含版本**](https://github.com/Zppppp124/MajdataSync/releases/download/v1.9.0/MajdataSync-win-x64-v1.9.0.zip) · [离线 HTML 使用说明书](docs/MajdataSync-Manual.html) · [查看全部版本](https://github.com/Zppppp124/MajdataSync/releases)
 
 Windows 10/11 可直接运行，无需单独安装 .NET。程序界面使用 WebView2，大多数 Windows 10/11 已预装该运行时。
 
-## 功能
+## 快速开始
 
-- 自动寻找 MajdataPlay 的 `MaiCharts\Original`，支持选择游戏根目录或 Original 文件夹，不绑定盘符。
-- 全量索引站点曲目，按上传日期查询；通过曲目 ID 与站点哈希增量同步新谱面和新版谱面。
-- 索引使用站点 `limit=99999` 完整列表接口，并在本地保存曲目快照；启动时先秒开缓存，再在后台刷新。
-- 每首曲目并行下载曲目、封面、谱面与可选 PV，默认 6 个并行任务，可在 1-12 之间调整。
-- 曲目卡可勾选后批量下载；每首下载完成会立即写入同步索引，批量任务中断后已完成曲目不会丢失。
-- 直接生成 `Original\曲名\`，文件位于曲目根目录，不保留 ZIP。
-- 导入已有 ZIP 时，以 ZIP 文件名建立曲目文件夹，并自动展开单层同名目录。
-- 校验 ZIP 路径，阻止 `../` 等目录穿越内容。
-- 在 `Original\.majdata-sync-index.json` 记录同步状态，在每首曲目保存 `id` 与 `.majdata-sync.json`。
-- 谱面索引与资源下载会测试 Majdata 本站和用户提供的同源镜像，优先使用低延迟线路；设置中可关闭镜像。
-- 可选择仅写本地曲目库、仅写 MajdataPlay 在线缓存，或两者同时写入。
-- 支持把现有本地曲目批量预热到 `Cache\Net\MajdataNET`，并按游戏规则生成 `.sha256`。
-- 集成游戏管理：稳定版固定使用 `MajdataPlay_Build`，测试版使用 MajdataPlay nightly；两者均接入 GitHub 三路加速镜像并自动测速。
-- 大型游戏包测速后会锁定最快且能持续传输的线路，不再在每个分片之间轮流切换镜像。
-- 支持稳定版与测试版切换，重新下载程序文件时保留 `MaiCharts`、`Skins`、`Cache`、`RecordOutputs`、`Logs` 和 `settings.json`。
-- 支持选择 D3D11、D3D12、OpenGL、Vulkan、测试模式或谱面编辑模式启动。
-- 从 CNB 或 GitHub 读取社区皮肤列表，下载、重装并直接应用 `Display.Skin`。
-- 内置常用游戏设置编辑器；高级设置会列出未展示字段，并提供中文说明、有效值与搜索。
+1. 下载 ZIP 后**完整解压**到一个普通文件夹，再双击 `MajdataSync.exe`。
+2. 首次打开选择 MajdataPlay 游戏根目录，或直接选择 `MaiCharts\Original`。
+3. 点击“刷新索引”，等待曲目列表出现。
+4. 搜索或按日期筛选；打勾后点击“下载所选”，或使用“同步新谱面”“下载全部谱面”。
 
-## 运行
+> [!TIP]
+> 不要直接在 WinRAR 等压缩包临时目录里运行。临时目录可能被清理，可能让下载中的窗口突然消失。建议先解压，并关闭正在运行的 MajdataPlay 再批量下载或切换版本。
 
-发布目录中的 `MajdataSync.exe` 可直接运行。首次打开如果自动识别失败，选择 `MajdataPlay.exe` 所在目录，程序会自动定位 `MaiCharts\Original`；也可以直接选择 `Original` 文件夹。
+## 曲目库
 
-建议关闭 MajdataPlay 后再批量下载或替换曲目，以免曲目库正在读取时文件被占用。
+![曲目勾选与批量下载](docs/assets/feature-library.svg)
 
-## 下载结构
+### 选择与批量下载
+
+- 曲目卡左上角有可勾选圆点，选择后“下载所选”按钮启用，只处理打勾曲目。
+- “同步新谱面”只同步未下载或站点哈希已变化的版本。
+- “下载全部谱面”与筛选结果适合补抓整个时间段或完整曲库。
+- 卡片右上角状态区分：已入库、未下载、有更新。
+
+### 每首完成立即入库
+
+每首曲目在下载并校验成功后立即保存到同步索引。即使后续曲目下载失败或程序停止，已完成的部分仍然保留；重新同步只会继续缺少的曲目。
+
+### 日期更新
+
+“按日期更新”可选择上传日期区间，适合补抓某次活动或某个发布时间段的谱面。
+
+## 游戏管理
+
+![游戏管理与版本切换](docs/assets/feature-game.svg)
+
+在“游戏管理”页可以选择版本通道、下载/重装游戏、检查更新、打开目录、启动游戏。
+
+| 通道 | 下载来源 | 更新方式 |
+| --- | --- | --- |
+| **稳定版** | `TeamMajdata/MajdataPlay_Build` | 逐文件校验、下载和断点续传 |
+| **测试版 nightly** | `TeamMajdata/MajdataPlay` | 下载完整 nightly 包后安全替换程序文件 |
+
+切换版本时会保留 `MaiCharts`、`Skins`、`Cache`、`RecordOutputs`、`Logs` 和 `settings.json`。程序文件会替换，但曲目、皮肤、缓存、成绩输出、日志和设置不会丢失。切换前仍建议关闭游戏。
+
+## 网络加速与续传
+
+![下载线路锁定与回退](docs/assets/feature-network.svg)
+
+- 大型游戏包会测试 `ghfast.top`、`gh-proxy.com`、`ghproxy.net` 与 GitHub 直连。
+- 测速后锁定一个能稳定传输的线路，所有分片都走该线路，不再每个分片轮换镜像。
+- 当前线路短暂中断时，会等待并利用已有分片继续下载。
+- 当前线路持续失败后，才逐步尝试其它线路，未完成分片仍然保留。
+- 谱面索引与资源下载会优先测试 Majdata 本站和同源镜像，自动回退主站。
+
+镜像只是在程序中替换 GitHub 下载地址，不会安装、启动或接管系统代理。能否连接仍取决于本机网络、DNS、防火墙和镜像站状态。
+
+## 在线缓存
+
+顶部“存放位置”支持三种模式：
+
+- **本地 + 在线缓存**：同时写入 `Original` 与游戏在线缓存。
+- **仅本地曲目库**：只保留可直接游玩的本地谱面目录。
+- **仅在线缓存**：只写入 `Cache\Net\MajdataNET`。
+
+“预热在线缓存”会把已有本地曲目写入在线缓存目录，并按游戏规则生成 `.sha256` 文件。
+
+## 皮肤与设置
+
+![设置、高级设置与缓存](docs/assets/feature-settings.svg)
+
+- 皮肤页可读取社区皮肤列表，下载、重装并直接应用 `Display.Skin`。
+- 常用设置支持并行任务数、PV 视频、自动检查、谱面镜像和存放位置。
+- 游戏管理页可读取 `settings.json`，高级设置会列出内置表单未显示的字段。
+- 高级设置提供中文说明、默认值、有效值、分组与搜索。
+
+## 曲目目录结构
+
+下载曲目会直接生成 `Original\曲名\`，文件位于曲目目录根部，不保留 ZIP：
 
 ```text
 Original
@@ -54,19 +116,38 @@ Original
    └─ .majdata-sync.json
 ```
 
-部分已有 MajdataPlay 谱面使用 `track.opus` 或 `bg.png`。程序不会改动无关的现有曲目，只会写入自己下载或导入的曲目目录。
+| 内容 | 位置 |
+| --- | --- |
+| 本地曲目 | `MaiCharts\Original\曲名\` |
+| 同步索引 | `Original\.majdata-sync-index.json` |
+| 在线缓存 | `Cache\Net\MajdataNET` |
+| 曲库索引缓存 | `%LOCALAPPDATA%\MajdataSync\catalog.json` |
+| 运行日志 | `%LOCALAPPDATA%\MajdataSync\logs` |
 
-## 说明
+部分已有 MajdataPlay 谱面使用 `track.opus` 或 `bg.png`。程序不会修改无关的现有曲目，只写入自己下载或导入的曲目目录。
 
-- 站点接口与页面资源来自 `https://majdata.net`。网络不可用、Cloudflare 限流或站点改版时，程序会显示具体错误，不会误删现有曲目。
-- 谱面镜像通过相同曲目 ID 和 `/api3/api/maichart/...` 接口读取数据；程序逐曲目校验必要文件，镜像失败时回退主站。
-- 稳定版不再使用 CNB 作为主下载源，固定从 `TeamMajdata/MajdataPlay_Build` 获取，通过 `ghfast.top`、`gh-proxy.com`、`ghproxy.net` 和直连 GitHub 自动测速后下载。
-- 下载采用临时目录写入，只有必需文件齐全后才移动到 `Original`，避免产生半成品曲目。
-- 下载与 ZIP 导入使用 `Original` 同盘的隐藏工作目录 `.majdata-work`，因此跨盘安装无需搬运巨型临时文件；成功提交后自动清理对应缓存。
-- 索引缓存位于 `%LOCALAPPDATA%\MajdataSync\catalog.json`，完整接口不可用时会自动回退到分页查找。
-- ZIP 导入要求包内包含 `maidata.txt`。
-- 应用皮肤只会更新 `settings.json` 的 `Display.Skin`；高级设置只写入修改后的高级字段。
-- 运行日志位于 `%LOCALAPPDATA%\MajdataSync\logs`，设置页可直接打开。
+## 常见问题
+
+<details>
+<summary><strong>下载窗口突然消失，怎么办？</strong></summary>
+
+先确认程序是从普通文件夹运行的，不是 WinRAR 临时目录。新版本会在启动日志里记录版本和运行路径。仍出现时，打开运行日志查看是否有 `Unhandled UI exception`。
+
+</details>
+
+<details>
+<summary><strong>为什么下载速度会变慢？</strong></summary>
+
+镜像、CDN、本机网络和防火墙都会影响速度。程序会为短暂波动保留断点并继续当前线路，只有持续失败才尝试其它线路。
+
+</details>
+
+<details>
+<summary><strong>切换测试版会丢曲目吗？</strong></summary>
+
+不会。切换版本只替换游戏程序文件，保留曲目、皮肤、缓存、成绩输出、日志和设置。
+
+</details>
 
 ## 从源码构建
 
@@ -77,4 +158,23 @@ dotnet build .\MajdataSync\MajdataSync.csproj -c Release
 dotnet publish .\MajdataSync\MajdataSync.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=false -o .\MajdataSync\publish
 ```
 
-程序界面使用 WebView2；Windows 10/11 通常已预装 Microsoft Edge WebView2 Runtime。
+在发布包根目录可以把使用说明一起打包：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\build-release.ps1
+```
+
+## 说明
+
+- 站点接口与页面资源来自 `https://majdata.net`。网络不可用、Cloudflare 限流或站点改版时，程序会显示具体错误，不会误删现有曲目。
+- 谱面镜像通过相同曲目 ID 和 `/api3/api/maichart/...` 接口读取数据。
+- 下载采用临时目录写入，只有必需文件齐全后才移动到 `Original`，避免产生半成品曲目。
+- ZIP 导入要求包内包含 `maidata.txt`。
+- 应用皮肤只会更新 `settings.json` 的 `Display.Skin`；高级设置只写入修改后的字段。
+- 程序界面使用 WebView2；Windows 10/11 通常已预装 Microsoft Edge WebView2 Runtime。
+
+## 致谢
+
+- [majdata.net](https://majdata.net)：谱面索引与下载来源。
+- [TeamMajdata](https://github.com/TeamMajdata)：MajdataPlay 游戏、构建包与皮肤。
+- 所有为 MajdataPlay 制作谱面、皮肤与工具的朋友。

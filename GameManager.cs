@@ -234,7 +234,7 @@ internal sealed class GameManager
                                 ? $" · {FormatBytes((long)value.Speed)}/s"
                                 : "";
                             progress.Report((
-                                $"已锁定最快线路 {value.Source} · {FormatBytes(value.Bytes)} · {speed.TrimStart(' ', '·')}",
+                                $"下载线路 {value.Source} · {FormatBytes(value.Bytes)} · {speed.TrimStart(' ', '·')}",
                                 ratio));
                         }),
                         cancellationToken);
@@ -253,8 +253,7 @@ internal sealed class GameManager
                 catch (Exception ex)
                 {
                     lastError = ex;
-                    TryDelete(zipPath);
-                    TryDelete(zipPath + ".part");
+                    AppLogger.Write("测试版完整包下载失败，断点保留在目标目录", ex);
                     if (attempt + 1 < sources.Length)
                     {
                         progress.Report(($"{(attempt == 0 ? "首选" : "备用")}下载源失败，正在切换 {sources[attempt + 1].Name}…", null));
@@ -316,7 +315,10 @@ internal sealed class GameManager
         }
         finally
         {
-            TryDelete(zipPath);
+            if (File.Exists(zipPath))
+            {
+                TryDelete(GitHubAcceleratedDownloader.RouteMarkerPath(zipPath));
+            }
             TryDeleteFolder(extractRoot);
             TryDeleteFolder(stagedRoot);
         }

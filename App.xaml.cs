@@ -8,7 +8,10 @@ public partial class App : System.Windows.Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
-        AppLogger.Write($"Application starting, version {typeof(App).Assembly.GetName().Version}");
+        AppLogger.Write(
+            $"Application starting, version {typeof(App).Assembly.GetName().Version}, " +
+            $"path={AppContext.BaseDirectory}");
+
         AppDomain.CurrentDomain.UnhandledException += (_, args) =>
         {
             AppLogger.Write("Unhandled AppDomain exception", args.ExceptionObject as Exception);

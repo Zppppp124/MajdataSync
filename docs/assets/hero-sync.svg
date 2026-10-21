@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="720" viewBox="0 0 1600 720">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#dff5ff"/>
+      <stop offset=".55" stop-color="#f5fcff"/>
+      <stop offset="1" stop-color="#e8f1ff"/>
+    </linearGradient>
+    <linearGradient id="card" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#f5fbff"/>
+    </linearGradient>
+  </defs>
+  <rect width="1600" height="720" rx="36" fill="url(#bg)"/>
+  <circle cx="1300" cy="70" r="280" fill="#c7edff" opacity=".38"/>
+  <circle cx="1420" cy="640" r="250" fill="#e1e9ff" opacity=".8"/>
+  <g font-family="Microsoft YaHei UI, Segoe UI, sans-serif">
+    <text x="100" y="132" fill="#39758f" font-size="34" font-weight="700" letter-spacing="1">MAJDATA SYNC</text>
+    <text x="100" y="208" fill="#315b72" font-size="64" font-weight="700">给喜欢的谱面，</text>
+    <text x="100" y="284" fill="#47a9cb" font-size="64" font-weight="700">点一个大大的赞吧</text>
+    <text x="102" y="353" fill="#6b8c9e" font-size="25">搜索、批量下载、缓存、游戏版本和皮肤，一处完成。</text>
+    <g transform="translate(100 418)">
+      <rect width="270" height="88" rx="20" fill="#55bddf"/>
+      <text x="30" y="57" fill="#fff" font-size="28" font-weight="700">开始整理</text>
+      <path d="M210 32v23m0 0 9-9m-9 9-9-9" stroke="#fff" stroke-width="4" fill="none" stroke-linecap="round"/>
+    </g>
+    <g transform="translate(100 565)" fill="#52778c" font-size="22">
+      <text x="0">曲目勾选批量下载</text>
+      <circle cx="248" cy="-8" r="5" fill="#79cbd8"/>
+      <text x="274">逐首立即入库</text>
+      <circle cx="470" cy="-8" r="5" fill="#79cbd8"/>
+      <text x="496">断点续传</text>
+    </g>
+    <g transform="translate(930 98)">
+      <rect width="560" height="540" rx="32" fill="url(#card)" stroke="#c6e2f0" stroke-width="2"/>
+      <rect x="30" y="30" width="500" height="56" rx="14" fill="#f1f9fd"/>
+      <circle cx="60" cy="58" r="10" fill="#74c7de"/>
+      <text x="85" y="67" fill="#527b91" font-size="22" font-weight="600">原始谱面库已连接</text>
+      <text x="30" y="137" fill="#4d768d" font-size="25" font-weight="700">今日新增 12 首</text>
+      <text x="30" y="171" fill="#8aa7b8" font-size="17">majdata.net · 已完成同步</text>
+      <g transform="translate(30 200)">
+        <rect width="154" height="190" rx="18" fill="#e7f8ff"/>
+        <rect x="16" y="16" width="122" height="84" rx="12" fill="#a8dcef"/>
+        <circle cx="34" cy="34" r="10" fill="#fff"/>
+        <path d="m66 51 24 24m-24 0 24-24" stroke="#66b9d4" stroke-width="5" stroke-linecap="round"/>
+        <rect x="16" y="115" width="122" height="10" rx="5" fill="#bfdfeb"/>
+        <rect x="16" y="136" width="90" height="8" rx="4" fill="#d3e8f1"/>
+        <rect x="16" y="157" width="58" height="18" rx="9" fill="#7cc9df"/>
+      </g>
+      <g transform="translate(202 200)">
+        <rect width="154" height="190" rx="18" fill="#eef7ff"/>
+        <rect x="16" y="16" width="122" height="84" rx="12" fill="#b8d8f2"/>
+        <circle cx="34" cy="34" r="10" fill="#fff"/>
+        <path d="m66 51 24 24m-24 0 24-24" stroke="#6ca8d5" stroke-width="5" stroke-linecap="round"/>
+        <rect x="16" y="115" width="122" height="10" rx="5" fill="#c4ddeb"/>
+        <rect x="16" y="136" width="90" height="8" rx="4" fill="#d7e7f1"/>
+        <rect x="16" y="157" width="58" height="18" rx="9" fill="#87c6e7"/>
+      </g>
+      <g transform="translate(374 200)">
+        <rect width="156" height="190" rx="18" fill="#fff2f7"/>
+        <rect x="16" y="16" width="124" height="84" rx="12" fill="#f3c7dc"/>
+        <circle cx="34" cy="34" r="10" fill="#fff"/>
+        <path d="m68 51 24 24m-24 0 24-24" stroke="#db91b4" stroke-width="5" stroke-linecap="round"/>
+        <rect x="16" y="115" width="124" height="10" rx="5" fill="#eed5e0"/>
+        <rect x="16" y="136" width="90" height="8" rx="4" fill="#f2e2e9"/>
+        <rect x="16" y="157" width="60" height="18" rx="9" fill="#eaa7c6"/>
+      </g>
+      <rect x="30" y="424" width="500" height="82" rx="18" fill="#edf9fd" stroke="#d6eaf2"/>
+      <circle cx="70" cy="465" r="20" fill="#dff5ff"/>
+      <path d="M60 465h20m-10-10v20" stroke="#54b4d3" stroke-width="4" stroke-linecap="round"/>
+      <text x="106" y="458" fill="#466f86" font-size="20" font-weight="600">网络状态良好</text>
+      <text x="106" y="486" fill="#8aa8b9" font-size="15">自动测速 · 断线续传 · 多镜像回退</text>
+    </g>
+  </g>
+</svg>
