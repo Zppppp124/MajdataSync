@@ -306,8 +306,8 @@
     const channel = payload.channel === 'prerelease' ? 'prerelease' : 'stable';
     $('#gameChannel').value = channel;
     $('#gameChannelHint').textContent = channel === 'prerelease'
-      ? '测试版从 MajdataPlay 的 nightly 包更新，由 GitHub 加速线路下载。'
-      : '稳定版固定从 MajdataPlay_Build 获取，由 GitHub 加速线路下载。';
+      ? '测试版从 MajdataPlay 的 nightly 包更新，下载会自动续传到完成。'
+      : '稳定版固定从 MajdataPlay_Build 获取，下载会自动续传到完成。';
     if (installed && channel === 'stable') {
       state.gameUpdates = 0;
       $('#gameUpdateText').textContent = '检查游戏文件是否与最新稳定构建一致';

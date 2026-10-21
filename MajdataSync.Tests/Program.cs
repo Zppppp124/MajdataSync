@@ -226,7 +226,8 @@ internal static class Program
             if (args.Length == 1 &&
                 !args[0].StartsWith("gamestatus:", StringComparison.OrdinalIgnoreCase) &&
                 !args[0].StartsWith("catalogbench:", StringComparison.OrdinalIgnoreCase) &&
-                !args[0].StartsWith("resume:", StringComparison.OrdinalIgnoreCase))
+                !args[0].StartsWith("resume:", StringComparison.OrdinalIgnoreCase) &&
+                !args[0].StartsWith("range-retry:", StringComparison.OrdinalIgnoreCase))
             {
                 if (args[0].StartsWith("installgame:", StringComparison.OrdinalIgnoreCase))
                 {
@@ -270,7 +271,8 @@ internal static class Program
                 !args[0].StartsWith("routes:", StringComparison.OrdinalIgnoreCase) &&
                 !args[0].StartsWith("cache:", StringComparison.OrdinalIgnoreCase) &&
                 !args[0].StartsWith("gamedata:", StringComparison.OrdinalIgnoreCase) &&
-                !args[0].StartsWith("github-download:", StringComparison.OrdinalIgnoreCase))
+                !args[0].StartsWith("github-download:", StringComparison.OrdinalIgnoreCase) &&
+                !args[0].StartsWith("range-retry:", StringComparison.OrdinalIgnoreCase))
             {
                 var sampleRoot = FolderDetector.DetectFrom(args[0]);
                 Assert(sampleRoot is not null, "Sample root should be detected as a Majdata folder");
@@ -390,6 +392,15 @@ internal static class Program
                 Assert(sources.Count == 1,
                     "A large download should stay on one selected source until completion");
                 Console.WriteLine($"PASS: locked source {sources.Single()} for {new FileInfo(destination).Length} bytes");
+                return 0;
+            }
+
+            if (args.Length == 1 &&
+                args[0].StartsWith("range-retry:", StringComparison.OrdinalIgnoreCase))
+            {
+                var root = Path.GetFullPath(args[0]["range-retry:".Length..]);
+                await TestRangeRetryAsync(root, CancellationToken.None);
+                Console.WriteLine("PASS: repeated range interruptions resumed to a complete file");
                 return 0;
             }
 
@@ -664,6 +675,123 @@ internal static class Program
         Assert(File.ReadAllBytes(destination).SequenceEqual(payload),
             "Resumed file should match the original payload");
         Assert(requestCount == 1, "Resume request should reach the server once");
+    }
+
+    private static async Task TestRangeRetryAsync(
+        string root,
+        CancellationToken cancellationToken)
+    {
+        var payload = new byte[101 * 1024 * 1024];
+        for (var index = 0; index < payload.Length; index++)
+        {
+            payload[index] = (byte)(index % 251);
+        }
+        var chunkSize = 4 * 1024 * 1024;
+        using var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+        var requestCount = 0;
+        using var serverCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var server = Task.Run(async () =>
+        {
+            while (!serverCancellation.IsCancellationRequested)
+            {
+                TcpClient client;
+                try
+                {
+                    client = await listener.AcceptTcpClientAsync(serverCancellation.Token);
+                }
+                catch (OperationCanceledException)
+                {
+                    return;
+                }
+
+                using (client)
+                using (var stream = client.GetStream())
+                {
+                    var buffer = new byte[8192];
+                    var read = await stream.ReadAsync(buffer, serverCancellation.Token);
+                    var request = Encoding.ASCII.GetString(buffer, 0, read);
+                    var rangeHeader = request
+                        .Split("\r\n", StringSplitOptions.RemoveEmptyEntries)
+                        .FirstOrDefault(line => line.StartsWith("Range:", StringComparison.OrdinalIgnoreCase));
+                    var start = 0;
+                    var requestedEnd = payload.Length - 1;
+                    if (rangeHeader is not null)
+                    {
+                        var value = rangeHeader.Split('=')[1];
+                        var bounds = value.Split('-', 2);
+                        int.TryParse(bounds[0], out start);
+                        if (bounds.Length > 1 &&
+                            !string.IsNullOrWhiteSpace(bounds[1]) &&
+                            int.TryParse(bounds[1], out var end))
+                        {
+                            requestedEnd = Math.Min(end, payload.Length - 1);
+                        }
+                    }
+                    var remaining = Math.Max(0, requestedEnd - start + 1);
+                    var sendLength = Math.Min(remaining, chunkSize);
+                    if (sendLength <= 0)
+                    {
+                        continue;
+                    }
+                    var sendsWholeFile = rangeHeader is null;
+                    var status = sendsWholeFile ? "200 OK" : "206 Partial Content";
+                    var headerContentLength = sendsWholeFile ? sendLength : remaining;
+                    var header = $"HTTP/1.1 {status}\r\nContent-Length: {headerContentLength}\r\n" +
+                                 (sendsWholeFile
+                                     ? ""
+                                     : $"Content-Range: bytes {start}-{start + remaining - 1}/{payload.Length}\r\n") +
+                                 "Accept-Ranges: bytes\r\nConnection: close\r\n\r\n";
+                    await stream.WriteAsync(Encoding.ASCII.GetBytes(header), serverCancellation.Token);
+                    await stream.WriteAsync(payload.AsMemory(start, sendLength), serverCancellation.Token);
+                    await stream.FlushAsync(serverCancellation.Token);
+                    Console.WriteLine($"RANGE {start}-{start + sendLength - 1} length={sendLength}");
+                    Interlocked.Increment(ref requestCount);
+                }
+            }
+        }, serverCancellation.Token);
+
+        var destination = Path.Combine(root, "range-retry.bin");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var downloader = new GitHubAcceleratedDownloader();
+            using var operationCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            operationCancellation.CancelAfter(TimeSpan.FromMinutes(3));
+            await downloader.DownloadAsync(
+                $"http://127.0.0.1:{port}/range-retry.bin",
+                destination,
+                null,
+                operationCancellation.Token);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            Assert(false, "Range retry download did not finish automatically");
+        }
+        finally
+        {
+            serverCancellation.Cancel();
+            listener.Stop();
+            try
+            {
+                await server;
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch (ObjectDisposedException)
+            {
+            }
+            catch (SocketException)
+            {
+            }
+        }
+
+        Assert(File.ReadAllBytes(destination).SequenceEqual(payload),
+            "Range retry should complete the original payload");
+        Assert(requestCount > 1,
+            "Range retry test should make multiple interrupted requests");
     }
 
     private static void Assert(bool condition, string message)

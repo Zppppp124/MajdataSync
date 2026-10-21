@@ -30,9 +30,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          name: Majdata Sync v1.9.0
+          name: Majdata Sync v1.9.1
           body: |
-            ## Majdata Sync v1.9.0
+            ## Majdata Sync v1.9.1
 
             本次发布包含完整的 Windows x64 自包含版本，无需单独安装 .NET。
 
@@ -48,6 +48,8 @@ jobs:
             - 测试版完整包测速后锁定最快线路，避免下载中在多个镜像间无意义切换
             - README 改为图文说明，并新增离线单文件 HTML 使用手册
             - 增加临时目录启动提示和线路标记持久化
+            - 游戏包下载改为持续自动完成：保留断点、自动换线重试，无总重试轮次上限
+            - 只有主动停止、关闭程序或本机不可恢复错误才会结束下载
           files: |
             ${{ env.RELEASE_ASSET }}
             MajdataSync-Manual.html

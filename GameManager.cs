@@ -230,9 +230,11 @@ internal sealed class GameManager
                             var ratio = value.Total is > 0
                                 ? Math.Clamp((double)value.Bytes / value.Total.Value, 0, 1)
                                 : (double?)null;
-                            var speed = value.Speed > 0
-                                ? $" · {FormatBytes((long)value.Speed)}/s"
-                                : "";
+                            var speed = value.Speed < 0
+                                ? " · 网络波动，自动续传中"
+                                : value.Speed > 0
+                                    ? $" · {FormatBytes((long)value.Speed)}/s"
+                                    : "";
                             progress.Report((
                                 $"下载线路 {value.Source} · {FormatBytes(value.Bytes)} · {speed.TrimStart(' ', '·')}",
                                 ratio));
@@ -272,6 +274,21 @@ internal sealed class GameManager
             {
                 throw new InvalidDataException("下载源没有返回完整游戏包，请换一个下载源后重试");
             }
+
+        long? expectedLength = null;
+        var lengthMarker = zipPath + ".size";
+        if (File.Exists(lengthMarker) &&
+            long.TryParse(
+                await File.ReadAllTextAsync(lengthMarker, cancellationToken),
+                out var recordedLength))
+        {
+            expectedLength = recordedLength;
+        }
+        if (expectedLength is not null && package.Length != expectedLength.Value)
+        {
+            throw new InvalidDataException(
+                $"游戏包不完整：{package.Length:N0} / {expectedLength.Value:N0} 字节。断点已保留，重新执行会继续下载。");
+        }
 
             await using (var stream = File.OpenRead(zipPath))
             {
@@ -315,10 +332,8 @@ internal sealed class GameManager
         }
         finally
         {
-            if (File.Exists(zipPath))
-            {
-                TryDelete(GitHubAcceleratedDownloader.RouteMarkerPath(zipPath));
-            }
+            TryDelete(GitHubAcceleratedDownloader.RouteMarkerPath(zipPath));
+            TryDelete(zipPath + ".size");
             TryDeleteFolder(extractRoot);
             TryDeleteFolder(stagedRoot);
         }
@@ -942,14 +957,17 @@ internal sealed class GameManager
             Timeout = TimeSpan.FromSeconds(45)
         };
         http.DefaultRequestHeaders.UserAgent.ParseAdd("MajdataSync/1.5");
-        var acceleratedUrls = await _accelerator.GetCandidateOrderAsync(
-            url,
-            cancellationToken);
+        var acceleratedUrls = (await GitHubAcceleratedDownloader.RankCandidatesAsync(
+                url,
+                cancellationToken))
+            .Select(candidate => candidate.Url)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
         for (var attempt = 0; attempt < 6; attempt++)
         {
             cancellationToken.ThrowIfCancellationRequested();
             var candidateUrl = acceleratedUrls.Count > 0
-                ? acceleratedUrls[attempt % acceleratedUrls.Count].Url
+                ? acceleratedUrls[attempt % acceleratedUrls.Count]
                 : url;
             var existing = File.Exists(partPath) ? new FileInfo(partPath).Length : 0;
             try

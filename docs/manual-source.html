@@ -138,7 +138,7 @@
     <aside>
       <div class="brand">
         <img src="{{SALT_AVATAR}}" alt="盐">
-        <div><strong>MAJDATA SYNC</strong><span>使用说明书 · v1.9.0</span></div>
+        <div><strong>MAJDATA SYNC</strong><span>使用说明书 · v1.9.1</span></div>
       </div>
       <nav>
         <a href="#start">快速开始</a>
@@ -160,7 +160,7 @@
             <h1>给喜欢的谱面，点一个大大的赞吧</h1>
             <p>从 majdata.net 找谱面，勾选后批量下载；每完成一首就立即入库，中断也不白下。</p>
           </div>
-          <span class="version">v1.9.0 · Windows x64</span>
+          <span class="version">v1.9.1 · Windows x64</span>
         </div>
         <div class="quick-actions">
           <a class="button" href="https://github.com/Zppppp124/MajdataSync/releases/latest">下载最新版本</a>
@@ -211,10 +211,13 @@
       </section>
 
       <section id="network">
-        <h2>网络与续传：线路锁定，不做无意义切换</h2>
+        <h2>网络与续传：自动完成，不提前放弃</h2>
         <img class="figure" src="{{NETWORK}}" alt="网络线路锁定与回退示意图">
         <h3>大型游戏包</h3>
         <p>程序会测试 Fast、Proxy、Mirror 与 GitHub 直连。成功选中线路后，全部分片都固定使用该线路；短暂中断会等待并继续从已完成字节续传。</p>
+        <div class="callout good"><strong>自动到完整结束：</strong>游戏包下载没有总重试轮数上限。当前线路持续无进度时会换线，其他线路也会继续参与重试；已下载分片始终保留。程序会持续运行，直到游戏包长度正确、校验成功并完成替换，或你主动停止。</div>
+        <div class="callout"><strong>谱面下载：</strong>每首曲目成功后立即入库。批量同步中某一首失败，会继续处理其他曲目；再次点击同步只会补齐未完成或需要更新的曲目。</div>
+        <div class="callout warn"><strong>以下情况需要你处理：</strong>取消下载、关闭程序、磁盘空间不足、目标目录没有写入权限，或者安装目录被其他程序占用。修正这些问题后重新开始，会从保留的断点继续。</div>
         <h3>谱面下载</h3>
         <p>谱面索引与资源下载会优先测试 Majdata 本站和同源镜像，选择低延迟线路。镜像不可用时会回退主站，并逐曲目校验必需文件。</p>
         <div class="callout"><strong>断点会保留：</strong>未完成的临时文件保留在目标曲目目录或游戏安装目录的隐藏工作位置。重新开始时会尽量复用已有进度。</div>
@@ -273,7 +276,7 @@
         <h3>窗口下载到一半消失了</h3>
         <p>先确认不是从 WinRAR 临时目录直接运行。新的发布版会把版本和运行路径写入日志。若仍出现，打开日志文件夹，查看同一时间点是否有 <code>Unhandled UI exception</code> 或运行路径在 <code>Temp\Rar$</code> 下。</p>
         <h3>为什么下载速度会变慢？</h3>
-        <p>镜像站、CDN、本机网络和防火墙都会影响速度。程序会在线路短暂波动时继续等待和续传；只有当前线路持续失败时，才进入下一条线路。</p>
+        <p>镜像站、CDN、本机网络和防火墙都会影响速度。程序会自动等待、换线并继续续传，不会因为短时间降速而结束任务；最终必须取得完整包才会完成安装。</p>
         <h3>切换测试版会不会丢曲目？</h3>
         <p>不会。切换版本只替换游戏程序文件，保留曲目、皮肤、缓存、成绩输出、日志和设置。仍建议切换前关闭游戏。</p>
         <h3>索引第一次很慢</h3>
@@ -283,7 +286,7 @@
       </section>
 
       <footer>
-        Majdata Sync 使用说明书 · v1.9.0 · 离线单文件版本<br>
+        Majdata Sync 使用说明书 · v1.9.1 · 离线单文件版本<br>
         谱面数据来自 majdata.net，游戏与构建包来自 TeamMajdata 官方仓库。
       </footer>
     </main>

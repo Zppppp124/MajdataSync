@@ -22,9 +22,9 @@
 
 ## 下载
 
-当前版本：**v1.9.0**
+当前版本：**v1.9.1**
 
-[**下载 Windows x64 自包含版本**](https://github.com/Zppppp124/MajdataSync/releases/download/v1.9.0/MajdataSync-win-x64-v1.9.0.zip) · [离线 HTML 使用说明书](docs/MajdataSync-Manual.html) · [查看全部版本](https://github.com/Zppppp124/MajdataSync/releases)
+[**下载 Windows x64 自包含版本**](https://github.com/Zppppp124/MajdataSync/releases/download/v1.9.1/MajdataSync-win-x64-v1.9.1.zip) · [离线 HTML 使用说明书](docs/MajdataSync-Manual.html) · [查看全部版本](https://github.com/Zppppp124/MajdataSync/releases)
 
 Windows 10/11 可直接运行，无需单独安装 .NET。程序界面使用 WebView2，大多数 Windows 10/11 已预装该运行时。
 
@@ -76,8 +76,9 @@ Windows 10/11 可直接运行，无需单独安装 .NET。程序界面使用 Web
 
 - 大型游戏包会测试 `ghfast.top`、`gh-proxy.com`、`ghproxy.net` 与 GitHub 直连。
 - 测速后锁定一个能稳定传输的线路，所有分片都走该线路，不再每个分片轮换镜像。
-- 当前线路短暂中断时，会等待并利用已有分片继续下载。
-- 当前线路持续失败后，才逐步尝试其它线路，未完成分片仍然保留。
+- 当前线路短暂中断时，会等待并利用已有分片继续下载；下载任务没有总重试轮数上限。
+- 只有当前线路持续无进度，才切换到其它线路；切换时保留已完成分片并继续续传。
+- 游戏包下载或应用更新会一直运行，直到包完整、长度校验成功并安全替换为止。只有你主动停止、关闭程序，或遇到磁盘空间/文件权限等无法恢复的错误才会结束。
 - 谱面索引与资源下载会优先测试 Majdata 本站和同源镜像，自动回退主站。
 
 镜像只是在程序中替换 GitHub 下载地址，不会安装、启动或接管系统代理。能否连接仍取决于本机网络、DNS、防火墙和镜像站状态。

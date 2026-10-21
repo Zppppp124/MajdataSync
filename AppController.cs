@@ -2102,7 +2102,7 @@ internal sealed class AppController : IDisposable
         return SendAsync("state", new AppStatus
         {
             OperationRunning = _operationRunning,
-            Version = "1.9.0",
+            Version = "1.9.1",
             Site = ChartApi.SiteUrl
         });
     }

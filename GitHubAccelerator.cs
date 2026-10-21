@@ -10,6 +10,8 @@ internal sealed class GitHubAcceleratedDownloader
     private const int SegmentCount = 8;
     private const int MaxParallelSegments = 6;
     private const int ProbeBytes = 512 * 1024;
+    private static readonly TimeSpan StallTimeout = TimeSpan.FromSeconds(25);
+    private static readonly TimeSpan RouteRetryDelay = TimeSpan.FromSeconds(4);
     private static readonly object RouteGate = new();
     private static readonly Dictionary<string, string> SelectedRoutes =
         new(StringComparer.OrdinalIgnoreCase);
@@ -26,6 +28,12 @@ internal sealed class GitHubAcceleratedDownloader
             .Append(url)
             .ToArray();
 
+    private static IReadOnlyList<string> DownloadCandidates(string url) =>
+        url.StartsWith("http://127.0.0.1", StringComparison.OrdinalIgnoreCase) ||
+        url.StartsWith("http://localhost", StringComparison.OrdinalIgnoreCase)
+            ? [url]
+            : CandidateUrls(url);
+
     public async Task DownloadAsync(
         string url,
         string destination,
@@ -33,72 +41,56 @@ internal sealed class GitHubAcceleratedDownloader
         CancellationToken cancellationToken)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
-        var selected = await SelectRouteAsync(url, cancellationToken, destination);
-        var routes = new List<(string Label, string Url)> { selected };
-        routes.AddRange(
-            CandidateUrls(url)
-                .Where(candidate => !candidate.Equals(selected.Url, StringComparison.OrdinalIgnoreCase))
-                .Select(candidate => (
-                    Label: candidate.Equals(url, StringComparison.Ordinal)
-                        ? "直连 GitHub"
-                        : MirrorLabel(Mirrors.First(mirror =>
-                            candidate.StartsWith(mirror, StringComparison.Ordinal))),
-                    Url: candidate)));
+        var preferred = await SelectRouteAsync(url, cancellationToken, destination);
+        var routes = DownloadCandidates(url)
+            .OrderByDescending(candidate =>
+                candidate.Equals(preferred.Url, StringComparison.OrdinalIgnoreCase))
+            .Select(candidate => (
+                Label: candidate.Equals(url, StringComparison.Ordinal)
+                    ? "直连 GitHub"
+                    : MirrorLabel(Mirrors.First(mirror =>
+                        candidate.StartsWith(mirror, StringComparison.Ordinal))),
+                Url: candidate))
+            .ToList();
 
-        Exception? lastError = null;
-        for (var routeIndex = 0; routeIndex < routes.Count * 2; routeIndex++)
+        var routeIndex = 0;
+        while (true)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var selection = routes[routeIndex % routes.Count];
             WriteRouteMarker(destination, selection);
-            progress?.Report((selection.Label, GetDownloadedBytes(destination), null, 0));
-            for (var cycle = 0; cycle < 8; cycle++)
+            progress?.Report((
+                selection.Label,
+                GetDownloadedBytes(destination),
+                null,
+                -1));
+            try
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                try
-                {
-                    progress?.Report((
-                        selection.Label,
-                        GetDownloadedBytes(destination),
-                        null,
-                        0));
-                    await DownloadResumableAsync(
-                        destination,
-                        selection,
-                        progress,
-                        cancellationToken);
-                    return;
-                }
-                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-                {
-                    throw;
-                }
-                catch (Exception ex)
-                {
-                    lastError = ex;
-                    AppLogger.Write(
-                        $"线路 {selection.Label} 第 {cycle + 1}/8 次续传失败，继续使用该线路",
-                        ex);
-                    progress?.Report((
-                        selection.Label,
-                        GetDownloadedBytes(destination),
-                        null,
-                        0));
-                    await Task.Delay(
-                        TimeSpan.FromSeconds(Math.Min(8, 1 + cycle * 0.5)),
-                        cancellationToken);
-                }
+                await DownloadResumableAsync(
+                    destination,
+                    selection,
+                    progress,
+                    cancellationToken);
+                return;
             }
-
-            lock (RouteGate)
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
-                SelectedRoutes.Remove(url);
+                throw;
             }
-            TryDelete(RouteMarkerPath(destination));
+            catch (Exception ex)
+            {
+                AppLogger.Write(
+                    $"线路 {selection.Label} 下载暂停，将保留断点并自动继续",
+                    ex);
+                progress?.Report((
+                    selection.Label,
+                    GetDownloadedBytes(destination),
+                    null,
+                    -1));
+                await Task.Delay(RouteRetryDelay, cancellationToken);
+                routeIndex++;
+            }
         }
-
-        throw new IOException(
-            "所有线路反复续传仍失败；下载进度已保留，重新开始会从断点继续",
-            lastError);
     }
 
     public async Task<(string Label, string Url)> SelectRouteAsync(
@@ -143,7 +135,7 @@ internal sealed class GitHubAcceleratedDownloader
             return selected;
         }
 
-        var fallback = CandidateUrls(url)
+        var fallback = DownloadCandidates(url)
             .Select(candidate => (
                 Label: candidate.Equals(url, StringComparison.Ordinal)
                     ? "直连 GitHub"
@@ -200,26 +192,6 @@ internal sealed class GitHubAcceleratedDownloader
         }
         route = (label, url);
         return true;
-    }
-
-    public async Task<List<(string Label, string Url)>> GetCandidateOrderAsync(
-        string url,
-        CancellationToken cancellationToken)
-    {
-        var ranked = await RankCandidatesAsync(url, cancellationToken);
-        if (ranked.Count > 0)
-        {
-            return ranked;
-        }
-
-        return CandidateUrls(url)
-            .Select(candidate => (
-                Label: candidate.Equals(url, StringComparison.Ordinal)
-                    ? "直连 GitHub"
-                    : MirrorLabel(Mirrors.First(mirror =>
-                        candidate.StartsWith(mirror, StringComparison.Ordinal))),
-                Url: candidate))
-            .ToList();
     }
 
     public static async Task<List<(string Label, string Url)>> RankCandidatesAsync(
@@ -310,7 +282,23 @@ internal sealed class GitHubAcceleratedDownloader
             return;
         }
 
+        var lengthMarker = destination + ".size";
         var total = range.Total.Value;
+        if (total < 100_000_000)
+        {
+            throw new IOException(
+                $"下载线路返回的游戏包长度异常（{total:N0} 字节），已保留断点并准备换线");
+        }
+        if (File.Exists(lengthMarker) &&
+            long.TryParse(File.ReadAllText(lengthMarker), out var knownTotal) &&
+            knownTotal > total)
+        {
+            total = knownTotal;
+        }
+        await File.WriteAllTextAsync(
+            lengthMarker,
+            total.ToString(),
+            cancellationToken);
         var segments = BuildRanges(total, SegmentCount)
             .Select((item, index) => new Segment(
                 index,
@@ -416,7 +404,7 @@ internal sealed class GitHubAcceleratedDownloader
         CancellationToken cancellationToken)
     {
         var lastError = "";
-        for (var attempt = 0; attempt < 40; attempt++)
+        for (var attempt = 0; ; attempt++)
         {
             cancellationToken.ThrowIfCancellationRequested();
             var offset = segment.Downloaded;
@@ -436,6 +424,12 @@ internal sealed class GitHubAcceleratedDownloader
                     HttpCompletionOption.ResponseHeadersRead,
                     cancellationToken);
                 response.EnsureSuccessStatusCode();
+                var expectedEnd = response.Content.Headers.ContentRange?.To;
+                if (expectedEnd is not null && expectedEnd.Value != segment.End)
+                {
+                    throw new IOException(
+                        $"线路返回了错误的区间 {expectedEnd.Value}，应为 {segment.End}");
+                }
                 if (response.StatusCode != HttpStatusCode.PartialContent)
                 {
                     throw new IOException("线路不支持稳定分片续传");
@@ -516,7 +510,7 @@ internal sealed class GitHubAcceleratedDownloader
 
         var total = response.Content.Headers.ContentRange?.Length ??
                     (response.Content.Headers.ContentLength is { } length
-                        ? existing + length
+                        ? (append ? existing + length : length)
                         : null);
         await using var source = await response.Content.ReadAsStreamAsync(cancellationToken);
         await using var output = new FileStream(
@@ -552,11 +546,25 @@ internal sealed class GitHubAcceleratedDownloader
             }
         }
         await output.FlushAsync(cancellationToken);
+        await output.DisposeAsync();
         if (total is not null && new FileInfo(part).Length != total.Value)
         {
             throw new IOException("下载不完整，断点已保留");
         }
+        var actualLength = new FileInfo(part).Length;
+        if (total is null || actualLength != total.Value)
+        {
+            throw new IOException(
+                $"单流下载未完成：{actualLength:N0} / {total?.ToString("N0") ?? "未知"} 字节，断点已保留");
+        }
         File.Move(part, destination, overwrite: true);
+        if (total is not null)
+        {
+            await File.WriteAllTextAsync(
+                destination + ".size",
+                total.Value.ToString(),
+                cancellationToken);
+        }
         ClearRouteMarker(destination);
         progress?.Report((candidate.Label, received, total ?? received, 0));
     }
@@ -566,6 +574,13 @@ internal sealed class GitHubAcceleratedDownloader
         string url,
         CancellationToken cancellationToken)
     {
+        if (url.Contains("github.com", StringComparison.OrdinalIgnoreCase) &&
+            !Mirrors.Any(mirror => url.StartsWith(mirror, StringComparison.OrdinalIgnoreCase)) &&
+            !url.StartsWith("http://127.0.0.1", StringComparison.OrdinalIgnoreCase) &&
+            !url.StartsWith("http://localhost", StringComparison.OrdinalIgnoreCase))
+        {
+            return (false, null);
+        }
         using var request = new HttpRequestMessage(HttpMethod.Get, url);
         request.Headers.Range = new RangeHeaderValue(0, 0);
         using var response = await http.SendAsync(
