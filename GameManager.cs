@@ -145,6 +145,7 @@ internal sealed class GameManager
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var entry = entries[index];
+                RemoveInvalidStagedFile(stagedRoot, entry);
                 if (!string.IsNullOrWhiteSpace(entry.Checksum))
                 {
                     var existingPath = Path.Combine(
@@ -420,6 +421,28 @@ internal sealed class GameManager
     {
         CopyPreservedUserData(sourceRoot, stagedRoot);
         CommitStagedGame(stagedRoot, targetRoot, preserveUserData: true);
+    }
+
+    public static void RemoveInvalidStagedFileForTest(
+        string stagedRoot,
+        GameHashEntry entry)
+    {
+        RemoveInvalidStagedFile(stagedRoot, entry);
+    }
+
+    private static void RemoveInvalidStagedFile(string stagedRoot, GameHashEntry entry)
+    {
+        if (!entry.FilePath.Equals("MajdataPlay.exe", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+        var existingExe = Path.Combine(
+            stagedRoot,
+            entry.FilePath.Replace('/', Path.DirectorySeparatorChar));
+        if (File.Exists(existingExe) && new FileInfo(existingExe).Length < 1024)
+        {
+            File.Delete(existingExe);
+        }
     }
 
     public static async Task InstallStableFilesForTestAsync(

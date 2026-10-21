@@ -8,9 +8,9 @@ Majdata Sync 是一个 Windows 桌面工具，用于从 [majdata.net](https://ma
 
 ## 下载
 
-当前版本：**v1.8.0**
+当前版本：**v1.8.1**
 
-[下载 Windows x64 自包含版本](https://github.com/Zppppp124/MajdataSync/releases/download/v1.8.0/MajdataSync-win-x64-v1.8.0.zip)
+[下载 Windows x64 自包含版本](https://github.com/Zppppp124/MajdataSync/releases/download/v1.8.1/MajdataSync-win-x64-v1.8.1.zip)
 
 Windows 10/11 可直接运行，无需单独安装 .NET。程序界面使用 WebView2，大多数 Windows 10/11 已预装该运行时。
 

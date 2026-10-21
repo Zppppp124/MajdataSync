@@ -197,6 +197,18 @@ internal static class Program
             Assert(Directory.Exists(Path.Combine(switchTarget, "game-libs")),
                 "Channel switch should install new game directories");
 
+            var invalidStage = Path.Combine(testRoot, "InvalidStage");
+            Directory.CreateDirectory(invalidStage);
+            File.WriteAllBytes(Path.Combine(invalidStage, "MajdataPlay.exe"), []);
+            var invalidEntry = new GameHashEntry
+            {
+                FilePath = "MajdataPlay.exe",
+                Checksum = "stale"
+            };
+            GameManager.RemoveInvalidStagedFileForTest(invalidStage, invalidEntry);
+            Assert(!File.Exists(Path.Combine(invalidStage, "MajdataPlay.exe")),
+                "Zero-byte staged executables should be removed before retry");
+
             if (args.Length == 1 &&
                 !args[0].StartsWith("gamestatus:", StringComparison.OrdinalIgnoreCase) &&
                 !args[0].StartsWith("catalogbench:", StringComparison.OrdinalIgnoreCase) &&
