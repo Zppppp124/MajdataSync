@@ -18,3 +18,5 @@ jobs:
         run: dotnet build .\MajdataSync.csproj -c Release
       - name: Test
         run: dotnet run --project .\MajdataSync.Tests\MajdataSync.Tests.csproj -c Release
+        env:
+          MAJDATA_SYNC_REPO_ROOT: ${{ github.workspace }}

@@ -276,18 +276,21 @@ internal static class Program
             Assert(ChartItem.TryParseDifficultyLevel("宴") is null,
                 "Non-numeric difficulty labels should not become sortable levels");
 
-            var appScript = await File.ReadAllTextAsync(
-                Path.Combine(
-                    Path.GetDirectoryName(typeof(Program).Assembly.Location)!,
-                    "..", "..", "..", "..", "Web", "app.js"));
-            Assert(appScript.Contains(
-                       "if (channel === 'stable') {\n      $('#gameRoute').value = 'cnb';",
-                       StringComparison.Ordinal),
-                "Stable channel should lock the game route to CNB");
-            Assert(appScript.Contains(
-                       "if (isPrerelease && $('#gameRoute').value === 'cnb')",
-                       StringComparison.Ordinal),
-                "Prerelease channel should switch the game route to Fast");
+            var repositoryRoot = Environment.GetEnvironmentVariable("MAJDATA_SYNC_REPO_ROOT");
+            if (!string.IsNullOrWhiteSpace(repositoryRoot))
+            {
+                var appScriptPath = Path.Combine(repositoryRoot, "Web", "app.js");
+                Assert(File.Exists(appScriptPath), "Web/app.js should exist in the repository root");
+                var appScript = await File.ReadAllTextAsync(appScriptPath);
+                Assert(appScript.Contains(
+                           "if (channel === 'stable') {\n      $('#gameRoute').value = 'cnb';",
+                           StringComparison.Ordinal),
+                    "Stable channel should lock the game route to CNB");
+                Assert(appScript.Contains(
+                           "if (isPrerelease && $('#gameRoute').value === 'cnb')",
+                           StringComparison.Ordinal),
+                    "Prerelease channel should switch the game route to Fast");
+            }
 
             var packageArtifacts = Path.Combine(testRoot, "PackageArtifacts");
             Directory.CreateDirectory(packageArtifacts);
