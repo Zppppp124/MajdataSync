@@ -22,9 +22,9 @@
 
 ## 下载
 
-当前版本：**v1.9.2**
+当前版本：**v1.10.0**
 
-[**下载 Windows x64 自包含版本**](https://github.com/Zppppp124/MajdataSync/releases/download/v1.9.2/MajdataSync-win-x64-v1.9.2.zip) · [离线 HTML 使用说明书](docs/MajdataSync-Manual.html) · [查看全部版本](https://github.com/Zppppp124/MajdataSync/releases)
+[**下载 Windows x64 自包含版本**](https://github.com/Zppppp124/MajdataSync/releases/download/v1.10.0/MajdataSync-win-x64-v1.10.0.zip) · [离线 HTML 使用说明书](docs/MajdataSync-Manual.html) · [查看全部版本](https://github.com/Zppppp124/MajdataSync/releases)
 
 Windows 10/11 可直接运行，无需单独安装 .NET。程序界面使用 WebView2，大多数 Windows 10/11 已预装该运行时。
 
@@ -66,9 +66,15 @@ Windows 10/11 可直接运行，无需单独安装 .NET。程序界面使用 Web
 | 通道 | 下载来源 | 更新方式 |
 | --- | --- | --- |
 | **稳定版** | `TeamMajdata/MajdataPlay_Build` | 逐文件校验、下载和断点续传 |
-| **测试版 nightly** | `TeamMajdata/MajdataPlay` | 下载完整 nightly 包后安全替换程序文件 |
+| **测试版 nightly** | `TeamMajdata/MajdataPlay` | 首次下载完整 nightly 包，后续按当前版本检查更新 |
 
-切换版本时会保留 `MaiCharts`、`Skins`、`Cache`、`RecordOutputs`、`Logs` 和 `settings.json`。程序文件会替换，但曲目、皮肤、缓存、成绩输出、日志和设置不会丢失。切换前仍建议关闭游戏。
+稳定版和测试版可以分别设置并记住目录。首次下载当前版本时选择的目录会成为该版本的默认目录；之后切换到另一个版本时，程序会先检查那个版本目录里是否已有游戏：
+
+- 已有游戏：直接切换，不重新下载，并按该版本的更新来源检查更新。
+- 目录存在但没有游戏：提示下载该版本完整包。
+- 还没有目录：先选择该版本目录，再下载完整包。
+
+底部提供“稳定版目录”和“测试版目录”两个入口。切换或更新只作用于当前版本自己的目录，曲目、皮肤、缓存、成绩输出、日志和设置不会被覆盖。
 
 ## 网络加速与续传
 

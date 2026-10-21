@@ -123,6 +123,19 @@ internal static class Program
                 "Online endpoint should save the selected source");
             Assert(savedEndpoints.GetProperty("Username").GetString() == "keep-me",
                 "Changing the endpoint should preserve login fields");
+            var stableRootPath = Path.Combine(testRoot, "StableGame");
+            var prereleaseRootPath = Path.Combine(testRoot, "PrereleaseGame");
+            Directory.CreateDirectory(stableRootPath);
+            Directory.CreateDirectory(prereleaseRootPath);
+            var channelSettings = new AppSettings
+            {
+                StableGameRootPath = stableRootPath,
+                PrereleaseGameRootPath = prereleaseRootPath,
+                GameChannel = "stable"
+            };
+            Assert(channelSettings.StableGameRootPath == stableRootPath &&
+                   channelSettings.PrereleaseGameRootPath == prereleaseRootPath,
+                "Stable and prerelease install roots should be stored independently");
             var candidateUrls = GitHubAcceleratedDownloader.CandidateUrls(
                 "https://github.com/TeamMajdata/MajdataPlay_Build/archive/refs/tags/LATEST.zip");
             Assert(candidateUrls.Count == 4, "GitHub acceleration should test three mirrors plus direct");

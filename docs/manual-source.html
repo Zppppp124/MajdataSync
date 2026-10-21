@@ -138,7 +138,7 @@
     <aside>
       <div class="brand">
         <img src="{{SALT_AVATAR}}" alt="盐">
-        <div><strong>MAJDATA SYNC</strong><span>使用说明书 · v1.9.2</span></div>
+        <div><strong>MAJDATA SYNC</strong><span>使用说明书 · v1.10.0</span></div>
       </div>
       <nav>
         <a href="#start">快速开始</a>
@@ -160,7 +160,7 @@
             <h1>给喜欢的谱面，点一个大大的赞吧</h1>
             <p>从 majdata.net 找谱面，勾选后批量下载；每完成一首就立即入库，中断也不白下。</p>
           </div>
-          <span class="version">v1.9.2 · Windows x64</span>
+          <span class="version">v1.10.0 · Windows x64</span>
         </div>
         <div class="quick-actions">
           <a class="button" href="https://github.com/Zppppp124/MajdataSync/releases/latest">下载最新版本</a>
@@ -204,7 +204,14 @@
             <tr><td>测试版</td><td>TeamMajdata/MajdataPlay 的 nightly</td><td>完整 nightly 包下载后安全替换程序文件</td></tr>
           </tbody>
         </table>
-        <p>切换版本时会保留 <code>MaiCharts</code>、<code>Skins</code>、<code>Cache</code>、<code>RecordOutputs</code>、<code>Logs</code> 与 <code>settings.json</code>。只需要替换游戏程序本身。</p>
+        <p>稳定版和测试版可以分别设置并记住目录。首次下载当前版本时选择的目录会成为该版本默认目录；之后切换版本时，程序会先检查目标版本目录里是否已有游戏。</p>
+        <div class="cards">
+          <div class="card"><strong>已有游戏</strong><span>直接切换到该版本，不重新下载；之后按该版本来源检查更新。</span></div>
+          <div class="card"><strong>目录存在但没有游戏</strong><span>提示下载该版本完整包，完成后自动切换。</span></div>
+          <div class="card"><strong>还没有目录</strong><span>先选择该版本目录，再进行首次下载。</span></div>
+          <div class="card"><strong>两个目录入口</strong><span>页面底部可分别打开稳定版目录和测试版目录。</span></div>
+        </div>
+        <p>切换和更新只作用于当前版本自己的目录，<code>MaiCharts</code>、<code>Skins</code>、<code>Cache</code>、<code>RecordOutputs</code>、<code>Logs</code> 与 <code>settings.json</code> 不会被覆盖。</p>
         <div class="callout warn"><strong>不要在压缩包临时目录运行：</strong>从 WinRAR 等临时目录直接双击时，解压软件可能在下载期间清理目录，窗口会突然消失。请先完整解压，再运行 <code>MajdataSync.exe</code>。</div>
         <h3>启动与编辑</h3>
         <p>启动区可以选择 D3D11、D3D12、OpenGL、Vulkan，或进入测试/谱面编辑模式。没有特殊需要时保持默认即可。</p>
@@ -286,7 +293,7 @@
       </section>
 
       <footer>
-        Majdata Sync 使用说明书 · v1.9.2 · 离线单文件版本<br>
+        Majdata Sync 使用说明书 · v1.10.0 · 离线单文件版本<br>
         谱面数据来自 majdata.net，游戏与构建包来自 TeamMajdata 官方仓库。
       </footer>
     </main>

@@ -297,13 +297,15 @@
 
   function renderGameStatus(payload) {
     state.gameStatus = payload;
-    const installed = !!payload.installed;
+    const channel = payload.channel === 'prerelease' ? 'prerelease' : 'stable';
+    const installed = channel === 'prerelease'
+      ? !!payload.prereleaseInstalled
+      : !!payload.stableInstalled;
     const noGameFolder = !payload.gameRoot;
     $('#gamePathText').textContent = payload.gameRoot
       ? (installed ? '游戏已安装，可以启动或检查更新' : '已选择安装目录，可以下载游戏')
       : '尚未选择游戏目录';
-    $('#gameFolderPath').textContent = payload.gameRoot || '未设置';
-    const channel = payload.channel === 'prerelease' ? 'prerelease' : 'stable';
+    $('#gameFolderPath').textContent = payload.gameRoot || '当前版本目录未设置';
     $('#gameChannel').value = channel;
     $('#gameChannelHint').textContent = channel === 'prerelease'
       ? '测试版从 MajdataPlay 的 nightly 包更新，下载会自动续传到完成。'
@@ -315,6 +317,9 @@
     $('#gameRouteHint').textContent = route === 'auto'
       ? '下载前自动测速；选择延迟与实际吞吐表现更好的线路。'
       : `优先使用 ${route === 'fast' ? 'Fast' : route === 'proxy' ? 'Proxy' : 'Mirror'}；持续无进度时自动回退。`;
+    const stableInstalled = !!payload.stableInstalled;
+    const prereleaseInstalled = !!payload.prereleaseInstalled;
+    const currentInstalled = channel === 'prerelease' ? prereleaseInstalled : stableInstalled;
     if (installed && channel === 'stable') {
       state.gameUpdates = 0;
       $('#gameUpdateText').textContent = '检查游戏文件是否与最新稳定构建一致';
@@ -325,30 +330,35 @@
       $('#gameUpdateText').textContent = '安装游戏后可检查更新';
       $('#updateGame').disabled = true;
     }
-    $('#gameChannel').disabled = noGameFolder;
-    $('#installGame').disabled = noGameFolder;
-    $('#installGame').innerHTML = noGameFolder
-      ? '<span data-icon="folder-open"></span> 先选择目录'
-      : installed
-        ? '<span data-icon="rotate-cw"></span> 重新安装'
-        : '<span data-icon="download"></span> 下载安装';
+    $('#gameChannel').disabled = false;
+    $('#installGame').disabled = installed;
+    $('#installGame').innerHTML = installed
+      ? '<span data-icon="check"></span> 当前版本已安装'
+      : '<span data-icon="download"></span> 下载当前版本';
     hydrateIcons($('#installGame'));
-    $('#installGameHint').textContent = noGameFolder
-      ? '先选择安装目录，再选择稳定版或测试版。'
-      : installed
-        ? '重新安装会覆盖程序文件，保留曲目、皮肤、缓存和设置。'
-        : '下载后自动解压到所选游戏目录';
+    $('#installGameHint').textContent = installed
+      ? '当前版本已存在；需要重装时可先选择该版本目录。'
+      : noGameFolder
+        ? '点击「下载当前版本」，首次下载时选择对应版本目录。'
+        : '将把当前版本完整包解压到该版本目录。';
     $('#launchGame').disabled = !installed;
-    $('#gameChannel').disabled = noGameFolder || !installed;
+    $('#gameChannel').disabled = false;
+    $('#openGameFolderStable').disabled = !payload.stableRoot;
+    $('#openGameFolderPrerelease').disabled = !payload.prereleaseRoot;
     $('#gameRoute').disabled = noGameFolder;
     $('#checkGameUpdate').disabled = !installed;
     $('#saveGameSettings').disabled = !installed;
     $('#loadAdvancedSettings').disabled = !installed;
     $('#saveAdvancedSettings').disabled = !installed;
-    if (installed && channel === 'prerelease') {
+    if (currentInstalled && channel === 'prerelease') {
       state.gameUpdates = 0;
       $('#gameUpdateText').textContent = '测试版更新会下载最新 nightly 完整包';
       $('#updateGame').disabled = false;
+    }
+    if (!currentInstalled && noGameFolder) {
+      $('#gameUpdateText').textContent = '首次使用请选择该版本的游戏目录';
+    } else if (!currentInstalled) {
+      $('#gameUpdateText').textContent = '该版本目录中暂无游戏，可下载完整包';
     }
     renderInstalledSkins(payload.skins || []);
   }
@@ -1179,10 +1189,6 @@
     });
     $('#chooseGameFolder').addEventListener('click', () => post('chooseGameFolder'));
     $('#installGame').addEventListener('click', () => {
-      if (!state.gameStatus?.gameRoot) {
-        post('chooseGameFolder');
-        return;
-      }
       if (!confirm('将下载完整 MajdataPlay 游戏包并解压到游戏目录，继续吗？')) return;
       post('installGame', { channel: $('#gameChannel').value });
       switchView('tasks');
@@ -1204,9 +1210,39 @@
       const current = state.gameStatus?.channel || 'stable';
       if (channel === current) return;
       const label = channel === 'prerelease' ? '测试版' : '稳定版';
+      const targetRoot = channel === 'prerelease'
+        ? state.gameStatus?.prereleaseRoot
+        : state.gameStatus?.stableRoot;
+      const targetInstalled = channel === 'prerelease'
+        ? state.gameStatus?.prereleaseInstalled
+        : state.gameStatus?.stableInstalled;
+      if (!targetRoot) {
+        const firstDownload = confirm(
+          `${label}还没有默认目录。是否现在下载${label}完整包？` +
+          '接下来会先选择该版本目录。'
+        );
+        if (!firstDownload) {
+          $('#gameChannel').value = current;
+          return;
+        }
+        post('installGame', { channel });
+        switchView('tasks');
+        return;
+      }
+      if (!targetInstalled) {
+        const download = confirm(
+          `${label}目录中还没有游戏。是否下载${label}完整包到：${targetRoot}？`
+        );
+        if (!download) {
+          $('#gameChannel').value = current;
+          return;
+        }
+        post('installGame', { channel });
+        switchView('tasks');
+        return;
+      }
       const confirmed = confirm(
-        `切换到${label}会重新下载该通道的完整游戏包。` +
-        '曲目、皮肤、缓存、成绩输出和设置都会保留，继续吗？'
+        `已检测到${label}游戏目录：${targetRoot}。直接切换吗？`
       );
       if (!confirmed) {
         $('#gameChannel').value = current;
@@ -1220,7 +1256,12 @@
     $('#launchGame').addEventListener('click', () => {
       post('launchGame', { option: $('#launchOption').value });
     });
-    $('#openGameFolder').addEventListener('click', () => post('openGameFolder'));
+    $('#openGameFolderStable').addEventListener('click', () => {
+      post('openGameFolder', { channel: 'stable' });
+    });
+    $('#openGameFolderPrerelease').addEventListener('click', () => {
+      post('openGameFolder', { channel: 'prerelease' });
+    });
     $('#refreshSkins').addEventListener('click', () => post('loadSkins'));
     $('#saveGameSettings').addEventListener('click', () => {
       if (!state.gameSettings) return;

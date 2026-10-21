@@ -122,6 +122,9 @@ internal sealed class AppController : IDisposable
             case "chooseGameFolder":
                 await ChooseGameFolderAsync();
                 break;
+            case "chooseChannelFolder":
+                await ChooseChannelFolderAsync(payload);
+                break;
             case "installGame":
                 await InstallGameAsync(payload);
                 break;
@@ -135,7 +138,7 @@ internal sealed class AppController : IDisposable
                 LaunchGame(payload);
                 break;
             case "openGameFolder":
-                OpenGameFolder();
+                OpenGameFolder(payload);
                 break;
             case "loadSkins":
                 await LoadSkinsAsync();
@@ -361,11 +364,31 @@ internal sealed class AppController : IDisposable
         }
     }
 
-    private string? CurrentGameRoot =>
-        !string.IsNullOrWhiteSpace(_settings.GameRootPath) &&
-        Directory.Exists(_settings.GameRootPath)
-            ? NormalizeGameRoot(_settings.GameRootPath)
-            : _folder?.GameRoot;
+    private bool CurrentChannelIsPrerelease =>
+        _settings.GameChannel.Equals("prerelease", StringComparison.OrdinalIgnoreCase);
+
+    private string? StableGameRoot =>
+        NormalizeConfiguredRoot(
+            _settings.StableGameRootPath ??
+            (_settings.GameChannel.Equals("stable", StringComparison.OrdinalIgnoreCase)
+                ? _settings.GameRootPath
+                : null));
+
+    private string? PrereleaseGameRoot =>
+        NormalizeConfiguredRoot(
+            _settings.PrereleaseGameRootPath ??
+            (_settings.GameChannel.Equals("prerelease", StringComparison.OrdinalIgnoreCase)
+                ? _settings.GameRootPath
+                : null));
+
+    private string? CurrentGameRoot => CurrentChannelIsPrerelease
+        ? PrereleaseGameRoot
+        : StableGameRoot;
+
+    private static string? NormalizeConfiguredRoot(string? root) =>
+        !string.IsNullOrWhiteSpace(root) && Directory.Exists(root)
+            ? NormalizeGameRoot(root)
+            : null;
 
     private static string NormalizeGameRoot(string root)
     {
@@ -375,11 +398,30 @@ internal sealed class AppController : IDisposable
         return exe is null ? root : Path.GetDirectoryName(exe)!;
     }
 
+    private void StoreChannelRoot(bool prerelease, string root, bool activateChannel = true)
+    {
+        if (prerelease)
+        {
+            _settings.PrereleaseGameRootPath = root;
+        }
+        else
+        {
+            _settings.StableGameRootPath = root;
+        }
+        if (activateChannel)
+        {
+            _settings.GameRootPath = root;
+            _settings.GameChannel = prerelease ? "prerelease" : "stable";
+        }
+        SettingsStore.Save(_settings);
+    }
+
     private async Task ChooseGameFolderAsync()
     {
+        var prerelease = CurrentChannelIsPrerelease;
         var dialog = new Microsoft.Win32.OpenFolderDialog
         {
-            Title = "选择 MajdataPlay 游戏目录",
+            Title = prerelease ? "选择测试版游戏目录" : "选择稳定版游戏目录",
             Multiselect = false,
             InitialDirectory = CurrentGameRoot ?? Environment.GetFolderPath(
                 Environment.SpecialFolder.DesktopDirectory)
@@ -397,8 +439,7 @@ internal sealed class AppController : IDisposable
             selected = Path.GetDirectoryName(exe)!;
         }
 
-        _settings.GameRootPath = selected;
-        SettingsStore.Save(_settings);
+        StoreChannelRoot(prerelease, selected);
         var detectedFolder = FolderDetector.DetectFrom(selected);
         if (detectedFolder is not null)
         {
@@ -417,6 +458,40 @@ internal sealed class AppController : IDisposable
         });
     }
 
+    private async Task ChooseChannelFolderAsync(JsonElement payload)
+    {
+        var channel = GetString(payload, "channel");
+        var prerelease = channel.Equals("prerelease", StringComparison.OrdinalIgnoreCase);
+        var initial = (prerelease ? PrereleaseGameRoot : StableGameRoot) ??
+                      Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
+        var dialog = new Microsoft.Win32.OpenFolderDialog
+        {
+            Title = prerelease ? "选择测试版游戏目录" : "选择稳定版游戏目录",
+            Multiselect = false,
+            InitialDirectory = initial
+        };
+        if (dialog.ShowDialog(_window) != true)
+        {
+            return;
+        }
+
+        var selected = Path.GetFullPath(dialog.FolderName);
+        var exe = Directory.GetFiles(selected, "MajdataPlay.exe", SearchOption.AllDirectories)
+            .FirstOrDefault();
+        if (exe is not null)
+        {
+            selected = Path.GetDirectoryName(exe)!;
+        }
+
+        StoreChannelRoot(prerelease, selected);
+        await SendGameStatusAsync();
+        await SendAsync("toast", new
+        {
+            kind = "success",
+            message = (prerelease ? "测试版" : "稳定版") + "默认目录：" + selected
+        });
+    }
+
     private Task SaveGameSourceAsync(JsonElement payload)
     {
         var route = GetString(payload, "route");
@@ -431,11 +506,15 @@ internal sealed class AppController : IDisposable
     private async Task SendGameStatusAsync()
     {
         var root = CurrentGameRoot;
-        var prerelease = root is not null && GameManager.IsPrerelease(root);
+        var prerelease = CurrentChannelIsPrerelease;
         await SendAsync("gameStatus", new
         {
             gameRoot = root ?? "",
+            stableRoot = StableGameRoot ?? "",
+            prereleaseRoot = PrereleaseGameRoot ?? "",
             installed = root is not null && GameManager.IsInstalled(root),
+            stableInstalled = StableGameRoot is { } stable && GameManager.IsInstalled(stable),
+            prereleaseInstalled = PrereleaseGameRoot is { } pre && GameManager.IsInstalled(pre),
             source = _settings.GameDownloadSource,
             downloadRoute = _settings.GameDownloadRoute,
             channel = prerelease ? "prerelease" : "stable",
@@ -446,22 +525,38 @@ internal sealed class AppController : IDisposable
 
     private async Task SwitchGameChannelAsync(JsonElement payload)
     {
-        var root = CurrentGameRoot;
-        if (root is null || _operationRunning)
+        if (_operationRunning)
         {
             return;
         }
 
         var request = payload.Deserialize<GameChannelRequest>(JsonOptions.Default);
         var prerelease = request?.Channel?.Equals("prerelease", StringComparison.OrdinalIgnoreCase) == true;
-        if (!Directory.Exists(root))
+        var targetRoot = prerelease ? PrereleaseGameRoot : StableGameRoot;
+        if (targetRoot is null)
         {
-            await SendAsync("toast", new { kind = "warning", message = "请先选择游戏目录" });
+            await SendAsync("toast", new
+            {
+                kind = "warning",
+                message = $"请先选择{(prerelease ? "测试版" : "稳定版")}的游戏目录"
+            });
             return;
         }
 
-        if (GameManager.IsInstalled(root) && GameManager.IsPrerelease(root) == prerelease)
+        if (CurrentChannelIsPrerelease == prerelease &&
+            GameManager.IsInstalled(targetRoot))
         {
+            return;
+        }
+
+        if (!GameManager.IsInstalled(targetRoot))
+        {
+            await SendAsync("toast", new
+            {
+                kind = "warning",
+                message = $"{(prerelease ? "测试版" : "稳定版")}目录中尚未检测到游戏，请在该版本目录首次下载完整包"
+            });
+            await SendGameStatusAsync();
             return;
         }
 
@@ -472,37 +567,12 @@ internal sealed class AppController : IDisposable
             {
                 stage = "download",
                 message = prerelease
-                    ? "正在切换测试版，曲目、皮肤、缓存和设置将保留…"
-                    : "正在切回稳定版，曲目、皮肤、缓存和设置将保留…",
+                    ? "测试版目录已存在，正在切换…"
+                    : "稳定版目录已存在，正在切回…",
                 indeterminate = true
             });
-            var status = new Progress<(string Message, double? Progress)>(value =>
-                _ = SendAsync("operation", new
-                {
-                    stage = "download",
-                    message = value.Message,
-                    progress = value.Progress,
-                    indeterminate = value.Progress is null
-                }));
-            if (GameManager.IsInstalled(root))
-            {
-                await _game.SwitchChannelAsync(
-                    root,
-                    prerelease,
-                    _settings.GameDownloadRoute,
-                    status,
-                    _operation!.Token);
-            }
-            else
-            {
-                await _game.InstallGameAsync(
-                    root,
-                    prerelease,
-                    _settings.GameDownloadRoute,
-                    status,
-                    _operation!.Token);
-            }
             _settings.GameChannel = prerelease ? "prerelease" : "stable";
+            _settings.GameRootPath = targetRoot;
             SettingsStore.Save(_settings);
             await SendAsync("operation", new
             {
@@ -510,10 +580,6 @@ internal sealed class AppController : IDisposable
                 message = prerelease ? "已切换到测试版" : "已切换到稳定版"
             });
             await SendGameStatusAsync();
-        }
-        catch (OperationCanceledException)
-        {
-            await SendAsync("operation", new { stage = "cancelled", message = "已取消版本切换" });
         }
         catch (Exception ex)
         {
@@ -533,25 +599,25 @@ internal sealed class AppController : IDisposable
             return;
         }
 
-        var dialog = new Microsoft.Win32.OpenFolderDialog
-        {
-            Title = "选择 MajdataPlay 安装目录",
-            Multiselect = false,
-            InitialDirectory = CurrentGameRoot ?? Environment.GetFolderPath(
-                Environment.SpecialFolder.DesktopDirectory)
-        };
-        if (dialog.ShowDialog(_window) != true)
-        {
-            return;
-        }
-
         var requestedChannel = GetString(payload, "channel");
         var prerelease = requestedChannel.Equals("prerelease", StringComparison.OrdinalIgnoreCase) ||
                          (string.IsNullOrWhiteSpace(requestedChannel) &&
                           _settings.GameChannel.Equals("prerelease", StringComparison.OrdinalIgnoreCase));
-        BeginOperation();
-        try
+        var target = prerelease ? PrereleaseGameRoot : StableGameRoot;
+        if (target is null)
         {
+            var dialog = new Microsoft.Win32.OpenFolderDialog
+            {
+                Title = prerelease ? "选择测试版安装目录" : "选择稳定版安装目录",
+                Multiselect = false,
+                InitialDirectory = CurrentGameRoot ?? Environment.GetFolderPath(
+                    Environment.SpecialFolder.DesktopDirectory)
+            };
+            if (dialog.ShowDialog(_window) != true)
+            {
+                return;
+            }
+
             var selected = Path.GetFullPath(dialog.FolderName);
             var gameAlreadyExists = Directory.GetFiles(
                 selected,
@@ -561,13 +627,15 @@ internal sealed class AppController : IDisposable
                 Path.GetFileName(Path.TrimEndingDirectorySeparator(selected)),
                 "MajdataPlay",
                 StringComparison.OrdinalIgnoreCase);
-            var target = gameAlreadyExists || isGameFolder
+            target = gameAlreadyExists || isGameFolder
                 ? selected
                 : Path.Combine(selected, "MajdataPlay");
-            _settings.GameRootPath = target;
-            _settings.GameDownloadSource = "github";
-            _settings.GameChannel = prerelease ? "prerelease" : "stable";
-            SettingsStore.Save(_settings);
+        }
+
+        StoreChannelRoot(prerelease, target, activateChannel: false);
+        BeginOperation();
+        try
+        {
             var status = new Progress<(string Message, double? Progress)>(value =>
                 _ = SendAsync("operation", new
                 {
@@ -589,6 +657,7 @@ internal sealed class AppController : IDisposable
                 SettingsStore.Save(_settings);
                 await SendAsync("folder", FolderPayload(detected));
             }
+            StoreChannelRoot(prerelease, target);
             await SendAsync("operation", new { stage = "done", message = "游戏安装完成" });
             await SendGameStatusAsync();
             await SendAsync("toast", new
@@ -825,7 +894,41 @@ internal sealed class AppController : IDisposable
         var root = CurrentGameRoot;
         if (root is not null && Directory.Exists(root))
         {
-            Process.Start(new ProcessStartInfo("explorer.exe", $"\"{root}\"")
+            OpenFolderPath(root);
+        }
+    }
+
+    private void OpenGameFolder(JsonElement payload)
+    {
+        var channel = GetString(payload, "channel");
+        if (channel.Length == 0)
+        {
+            OpenGameFolder();
+            return;
+        }
+
+        var root = channel.Equals("prerelease", StringComparison.OrdinalIgnoreCase)
+            ? PrereleaseGameRoot
+            : StableGameRoot;
+        if (root is null || !Directory.Exists(root))
+        {
+            _ = SendAsync("toast", new
+            {
+                kind = "warning",
+                message = "还没有设置" + (channel.Equals("prerelease", StringComparison.OrdinalIgnoreCase)
+                    ? "测试版"
+                    : "稳定版") + "目录"
+            });
+            return;
+        }
+        OpenFolderPath(root);
+    }
+
+    private static void OpenFolderPath(string path)
+    {
+        if (Directory.Exists(path))
+        {
+            Process.Start(new ProcessStartInfo("explorer.exe", $"\"{path}\"")
             {
                 UseShellExecute = true
             });
@@ -2128,7 +2231,7 @@ internal sealed class AppController : IDisposable
         return SendAsync("state", new AppStatus
         {
             OperationRunning = _operationRunning,
-            Version = "1.9.2",
+            Version = "1.10.0",
             Site = ChartApi.SiteUrl
         });
     }
