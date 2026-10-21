@@ -233,7 +233,9 @@ internal sealed class GameManager
                             var speed = value.Speed > 0
                                 ? $" · {FormatBytes((long)value.Speed)}/s"
                                 : "";
-                            progress.Report(($"正在从 {value.Source} 下载游戏包 · {FormatBytes(value.Bytes)} · {speed.TrimStart(' ', '·')}", ratio));
+                            progress.Report((
+                                $"已锁定最快线路 {value.Source} · {FormatBytes(value.Bytes)} · {speed.TrimStart(' ', '·')}",
+                                ratio));
                         }),
                         cancellationToken);
                     if (new FileInfo(zipPath).Length < 1_000_000)
@@ -477,11 +479,11 @@ internal sealed class GameManager
         var url = "https://raw.githubusercontent.com/TeamMajdata/MajdataPlay_Build/main/" + encodedPath;
         Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
         var partPath = destination + ".part";
-        var candidates = GitHubAcceleratedDownloader.CandidateUrls(url)
-            .OrderBy(candidate =>
-                candidate.Contains("gh-proxy.com", StringComparison.OrdinalIgnoreCase) ? 0 :
-                candidate.Contains("ghfast.top", StringComparison.OrdinalIgnoreCase) ? 1 :
-                candidate.Contains("ghproxy.net", StringComparison.OrdinalIgnoreCase) ? 2 : 3)
+        var candidates = (await GitHubAcceleratedDownloader.RankCandidatesAsync(
+                url,
+                cancellationToken))
+            .Select(candidate => candidate.Url)
+            .Concat(GitHubAcceleratedDownloader.CandidateUrls(url))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
         for (var attempt = 0; attempt < 12; attempt++)
@@ -938,14 +940,14 @@ internal sealed class GameManager
             Timeout = TimeSpan.FromSeconds(45)
         };
         http.DefaultRequestHeaders.UserAgent.ParseAdd("MajdataSync/1.5");
-        var acceleratedUrls = await _accelerator.CreateRankedCandidatesAsync(
+        var acceleratedUrls = await _accelerator.GetCandidateOrderAsync(
             url,
             cancellationToken);
         for (var attempt = 0; attempt < 6; attempt++)
         {
             cancellationToken.ThrowIfCancellationRequested();
             var candidateUrl = acceleratedUrls.Count > 0
-                ? acceleratedUrls[attempt % acceleratedUrls.Count]
+                ? acceleratedUrls[attempt % acceleratedUrls.Count].Url
                 : url;
             var existing = File.Exists(partPath) ? new FileInfo(partPath).Length : 0;
             try

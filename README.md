@@ -8,9 +8,9 @@ Majdata Sync 是一个 Windows 桌面工具，用于从 [majdata.net](https://ma
 
 ## 下载
 
-当前版本：**v1.8.1**
+当前版本：**v1.8.2**
 
-[下载 Windows x64 自包含版本](https://github.com/Zppppp124/MajdataSync/releases/download/v1.8.1/MajdataSync-win-x64-v1.8.1.zip)
+[下载 Windows x64 自包含版本](https://github.com/Zppppp124/MajdataSync/releases/download/v1.8.2/MajdataSync-win-x64-v1.8.2.zip)
 
 Windows 10/11 可直接运行，无需单独安装 .NET。程序界面使用 WebView2，大多数 Windows 10/11 已预装该运行时。
 
@@ -29,6 +29,7 @@ Windows 10/11 可直接运行，无需单独安装 .NET。程序界面使用 Web
 - 可选择仅写本地曲目库、仅写 MajdataPlay 在线缓存，或两者同时写入。
 - 支持把现有本地曲目批量预热到 `Cache\Net\MajdataNET`，并按游戏规则生成 `.sha256`。
 - 集成游戏管理：稳定版固定使用 `MajdataPlay_Build`，测试版使用 MajdataPlay nightly；两者均接入 GitHub 三路加速镜像并自动测速。
+- 大型游戏包测速后会锁定最快且能持续传输的线路，不再在每个分片之间轮流切换镜像。
 - 支持稳定版与测试版切换，重新下载程序文件时保留 `MaiCharts`、`Skins`、`Cache`、`RecordOutputs`、`Logs` 和 `settings.json`。
 - 支持选择 D3D11、D3D12、OpenGL、Vulkan、测试模式或谱面编辑模式启动。
 - 从 CNB 或 GitHub 读取社区皮肤列表，下载、重装并直接应用 `Display.Skin`。

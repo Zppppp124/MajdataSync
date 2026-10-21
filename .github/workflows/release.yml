@@ -29,9 +29,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          name: Majdata Sync v1.8.1
+          name: Majdata Sync v1.8.2
           body: |
-            ## Majdata Sync v1.8.1
+            ## Majdata Sync v1.8.2
 
             本次发布包含完整的 Windows x64 自包含版本，无需单独安装 .NET。
 
@@ -44,6 +44,7 @@ jobs:
             - 稳定版 / 测试版可切换，曲目、皮肤、缓存、成绩输出和设置会保留
             - 测试版更新改为下载完整 nightly 包后安全替换程序文件
             - 修复稳定版续传时异常小文件可能中断安装的问题
+            - 测试版完整包测速后锁定最快线路，避免下载中在多个镜像间无意义切换
           files: ${{ env.RELEASE_ASSET }}
           fail_on_unmatched_files: true
           overwrite_files: true

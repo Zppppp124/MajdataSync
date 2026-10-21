@@ -255,7 +255,8 @@ internal static class Program
                 !args[0].StartsWith("speed:", StringComparison.OrdinalIgnoreCase) &&
                 !args[0].StartsWith("routes:", StringComparison.OrdinalIgnoreCase) &&
                 !args[0].StartsWith("cache:", StringComparison.OrdinalIgnoreCase) &&
-                !args[0].StartsWith("gamedata:", StringComparison.OrdinalIgnoreCase))
+                !args[0].StartsWith("gamedata:", StringComparison.OrdinalIgnoreCase) &&
+                !args[0].StartsWith("github-download:", StringComparison.OrdinalIgnoreCase))
             {
                 var sampleRoot = FolderDetector.DetectFrom(args[0]);
                 Assert(sampleRoot is not null, "Sample root should be detected as a Majdata folder");
@@ -348,6 +349,33 @@ internal static class Program
                 Directory.CreateDirectory(root);
                 await TestResumeDownloadAsync(root, cancellationToken: CancellationToken.None);
                 Console.WriteLine("PASS: interrupted download resumed from existing .part bytes");
+                return 0;
+            }
+
+            if (args.Length == 2 &&
+                args[0].StartsWith("github-download:", StringComparison.OrdinalIgnoreCase))
+            {
+                var directory = Path.GetFullPath(args[0]["github-download:".Length..]);
+                Directory.CreateDirectory(directory);
+                var destination = Path.Combine(directory, "nightly.zip");
+                var downloader = new GitHubAcceleratedDownloader();
+                var sources = new HashSet<string>(StringComparer.Ordinal);
+                await downloader.DownloadAsync(
+                    args[1],
+                    destination,
+                    new Progress<(string Source, long Bytes, long? Total, double Speed)>(value =>
+                    {
+                        sources.Add(value.Source);
+                        Console.WriteLine(
+                            $"{value.Source} {value.Bytes}/{value.Total} {value.Speed:F0} B/s");
+                    }),
+                    CancellationToken.None);
+                Assert(File.Exists(destination), "GitHub accelerated download should produce a file");
+                Assert(new FileInfo(destination).Length > 100_000_000,
+                    "Nightly package should be complete");
+                Assert(sources.Count == 1,
+                    "A large download should stay on one selected source until completion");
+                Console.WriteLine($"PASS: locked source {sources.Single()} for {new FileInfo(destination).Length} bytes");
                 return 0;
             }
 

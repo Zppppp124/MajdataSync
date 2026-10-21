@@ -7,8 +7,10 @@ namespace MajdataSync;
 
 internal sealed class GitHubAcceleratedDownloader
 {
-    private const int SegmentCount = 12;
-    internal static readonly string[] Mirrors =
+    private const int SegmentCount = 8;
+    private const int MaxParallelSegments = 6;
+    private const int ProbeBytes = 512 * 1024;
+    private static readonly string[] Mirrors =
     [
         "https://ghfast.top/",
         "https://gh-proxy.com/",
@@ -28,7 +30,53 @@ internal sealed class GitHubAcceleratedDownloader
         CancellationToken cancellationToken)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
-        var candidates = CandidateUrls(url)
+        var candidates = await GetCandidateOrderAsync(url, cancellationToken);
+        Exception? lastError = null;
+        for (var index = 0; index < candidates.Count; index++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var candidate = candidates[index];
+            try
+            {
+                progress?.Report((candidate.Label, GetDownloadedBytes(destination), null, 0));
+                await DownloadResumableAsync(
+                    destination,
+                    candidate,
+                    progress,
+                    cancellationToken);
+                return;
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                lastError = ex;
+                AppLogger.Write(
+                    $"GitHub 下载线路 {candidate.Label} 失败，准备切换下一线路",
+                    ex);
+                if (index + 1 < candidates.Count)
+                {
+                    await Task.Delay(TimeSpan.FromMilliseconds(500), cancellationToken);
+                }
+            }
+        }
+
+        throw new IOException("GitHub 加速线路均下载失败，已保留断点", lastError);
+    }
+
+    public async Task<List<(string Label, string Url)>> GetCandidateOrderAsync(
+        string url,
+        CancellationToken cancellationToken)
+    {
+        var ranked = await RankCandidatesAsync(url, cancellationToken);
+        if (ranked.Count > 0)
+        {
+            return ranked;
+        }
+
+        return CandidateUrls(url)
             .Select(candidate => (
                 Label: candidate.Equals(url, StringComparison.Ordinal)
                     ? "直连 GitHub"
@@ -36,38 +84,6 @@ internal sealed class GitHubAcceleratedDownloader
                         candidate.StartsWith(mirror, StringComparison.Ordinal))),
                 Url: candidate))
             .ToList();
-
-        Exception? lastError = null;
-        for (var round = 0; round < 4; round++)
-        {
-            try
-            {
-                await DownloadResumableAsync(
-                    destination,
-                    candidates,
-                    progress,
-                    cancellationToken);
-                return;
-            }
-            catch (OperationCanceledException)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                lastError = ex;
-                await Task.Delay(TimeSpan.FromSeconds(Math.Min(8, round + 1)), cancellationToken);
-            }
-        }
-
-        throw new IOException("GitHub 加速线路均下载失败", lastError);
-    }
-
-    public Task<List<string>> CreateRankedCandidatesAsync(
-        string url,
-        CancellationToken cancellationToken)
-    {
-        return Task.FromResult(CandidateUrls(url).ToList());
     }
 
     public static async Task<List<(string Label, string Url)>> RankCandidatesAsync(
@@ -82,12 +98,8 @@ internal sealed class GitHubAcceleratedDownloader
                     : MirrorLabel(Mirrors.First(mirror =>
                         candidate.StartsWith(mirror, StringComparison.Ordinal))),
                 Url: candidate));
-        var tasks = probes.Select(probe => ProbeAsync(
-            http,
-            probe.Label,
-            probe.Url,
-            cancellationToken));
-        var results = await Task.WhenAll(tasks);
+        var results = await Task.WhenAll(probes.Select(probe =>
+            ProbeAsync(http, probe.Label, probe.Url, cancellationToken)));
         return results
             .Where(result => result.Speed > 0)
             .OrderByDescending(result => result.Speed)
@@ -103,11 +115,11 @@ internal sealed class GitHubAcceleratedDownloader
     {
         using var probeCancellation = CancellationTokenSource.CreateLinkedTokenSource(
             cancellationToken);
-        probeCancellation.CancelAfter(TimeSpan.FromSeconds(8));
+        probeCancellation.CancelAfter(TimeSpan.FromSeconds(10));
         try
         {
             using var request = new HttpRequestMessage(HttpMethod.Get, url);
-            request.Headers.Range = new RangeHeaderValue(0, 65535);
+            request.Headers.Range = new RangeHeaderValue(0, ProbeBytes - 1);
             var stopwatch = Stopwatch.StartNew();
             using var response = await http.SendAsync(
                 request,
@@ -116,9 +128,9 @@ internal sealed class GitHubAcceleratedDownloader
             response.EnsureSuccessStatusCode();
             await using var stream = await response.Content.ReadAsStreamAsync(
                 probeCancellation.Token);
-            var buffer = new byte[16 * 1024];
+            var buffer = new byte[64 * 1024];
             var total = 0;
-            while (total < 64 * 1024)
+            while (total < ProbeBytes)
             {
                 var read = await stream.ReadAsync(buffer, probeCancellation.Token);
                 if (read == 0)
@@ -128,8 +140,9 @@ internal sealed class GitHubAcceleratedDownloader
                 total += read;
             }
             stopwatch.Stop();
-            return total >= 1024
-                ? (label, url, total / Math.Max(0.01, stopwatch.Elapsed.TotalSeconds))
+            var speed = total / Math.Max(0.01, stopwatch.Elapsed.TotalSeconds);
+            return total >= 256 * 1024
+                ? (label, url, speed)
                 : (label, url, 0);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
@@ -144,110 +157,91 @@ internal sealed class GitHubAcceleratedDownloader
 
     private static async Task DownloadResumableAsync(
         string destination,
-        IReadOnlyList<(string Label, string Url)> candidates,
+        (string Label, string Url) candidate,
         IProgress<(string Source, long Bytes, long? Total, double Speed)>? progress,
         CancellationToken cancellationToken)
     {
         using var http = CreateClient();
-        long? total = null;
-        foreach (var (label, url) in candidates.Where(candidate =>
-                     !candidate.Label.Equals("直连 GitHub", StringComparison.Ordinal)))
+        var range = await ProbeRangeAsync(http, candidate.Url, cancellationToken);
+        if (!range.SupportsRange || range.Total is null or < 1_000_000)
         {
-            total = await GetContentLengthAsync(http, url, cancellationToken);
-            if (total is > 0)
-            {
-                break;
-            }
-        }
-        if (total is null or < 1_000_000)
-        {
-            await DownloadSingleAcrossSourcesAsync(
+            await DownloadSingleFromSourceAsync(
                 http,
                 destination,
-                candidates,
+                candidate,
                 progress,
                 cancellationToken);
             return;
         }
 
-        var ranges = BuildRanges(total.Value, SegmentCount);
-        var segments = ranges
-            .Select((range, index) => new Segment(
+        var total = range.Total.Value;
+        var segments = BuildRanges(total, SegmentCount)
+            .Select((item, index) => new Segment(
                 index,
-                range.Start,
-                range.End,
+                item.Start,
+                item.End,
                 destination + $".segment{index}"))
             .ToArray();
         foreach (var segment in segments)
         {
-            if (File.Exists(segment.Path))
-            {
-                var length = new FileInfo(segment.Path).Length;
-                if (length > segment.Expected)
-                {
-                    using var truncate = new FileStream(segment.Path, FileMode.Open, FileAccess.Write);
-                    truncate.SetLength(segment.Expected);
-                    length = segment.Expected;
-                }
-                segment.Downloaded = length;
-            }
-        }
-
-        var received = new long[segments.Length];
-        for (var index = 0; index < segments.Length; index++)
-        {
-            received[index] = segments[index].Downloaded;
-        }
-        var baseBytes = received.Sum();
-        var speedBytes = 0L;
-        var speedWatch = Stopwatch.StartNew();
-        var candidateIndex = 0;
-        for (var index = 0; index < segments.Length; index++)
-        {
-            var segment = segments[index];
-            if (segment.Downloaded >= segment.Expected)
+            if (!File.Exists(segment.Path))
             {
                 continue;
             }
 
-            var reserved = candidateIndex++;
-            var primaryCount = Math.Min(3, candidates.Count);
-            var candidate = candidates[reserved % primaryCount];
-            using var stallCancellation = CancellationTokenSource.CreateLinkedTokenSource(
-                cancellationToken);
-            stallCancellation.CancelAfter(TimeSpan.FromSeconds(20));
-            progress?.Report((candidate.Label, baseBytes, total, 0));
-            await DownloadSegmentWithFailoverAsync(
-                http,
-                segment,
-                candidates,
-                reserved % primaryCount,
-                current =>
-                {
-                    received[segment.Index] = current;
-                    var aggregate = received.Sum();
-                    if (speedWatch.ElapsedMilliseconds >= 250)
-                    {
-                        lock (received)
-                        {
-                            if (speedWatch.ElapsedMilliseconds >= 250)
-                            {
-                                var speed = (aggregate - baseBytes - speedBytes) /
-                                            Math.Max(0.001, speedWatch.Elapsed.TotalSeconds);
-                                speedBytes = aggregate - baseBytes;
-                                speedWatch.Restart();
-                                progress?.Report((candidate.Label, aggregate, total, speed));
-                            }
-                        }
-                    }
-                    stallCancellation.CancelAfter(TimeSpan.FromSeconds(20));
-                },
-                stallCancellation.Token);
+            var length = new FileInfo(segment.Path).Length;
+            if (length > segment.Expected)
+            {
+                using var stream = new FileStream(segment.Path, FileMode.Open, FileAccess.Write);
+                stream.SetLength(segment.Expected);
+                length = segment.Expected;
+            }
+            segment.Downloaded = length;
         }
+
+        var received = segments.Select(segment => segment.Downloaded).ToArray();
+        var aggregateBytes = received.Sum();
+        var speedBytes = 0L;
+        var speedWatch = Stopwatch.StartNew();
+        var progressGate = new object();
+        await Parallel.ForEachAsync(
+            segments.Where(segment => segment.Downloaded < segment.Expected),
+            new ParallelOptions
+            {
+                MaxDegreeOfParallelism = MaxParallelSegments,
+                CancellationToken = cancellationToken
+            },
+            async (segment, token) =>
+            {
+                await DownloadSegmentOnLockedRouteAsync(
+                    http,
+                    candidate,
+                    segment,
+                    current =>
+                    {
+                        received[segment.Index] = current;
+                        var aggregate = received.Sum();
+                        lock (progressGate)
+                        {
+                            if (speedWatch.ElapsedMilliseconds < 350)
+                            {
+                                return;
+                            }
+
+                            var speed = (aggregate - aggregateBytes - speedBytes) /
+                                        Math.Max(0.001, speedWatch.Elapsed.TotalSeconds);
+                            speedBytes = aggregate - aggregateBytes;
+                            speedWatch.Restart();
+                            progress?.Report((candidate.Label, aggregate, total, speed));
+                        }
+                    },
+                    token);
+            });
 
         foreach (var segment in segments)
         {
-            if (new FileInfo(segment.Path).Length != segment.Expected)
+            if (!File.Exists(segment.Path) ||
+                new FileInfo(segment.Path).Length != segment.Expected)
             {
                 throw new IOException($"分片 {segment.Index + 1} 不完整");
             }
@@ -268,23 +262,24 @@ internal sealed class GitHubAcceleratedDownloader
                 await input.CopyToAsync(output, cancellationToken);
             }
         }
+
         File.Move(part, destination, overwrite: true);
         foreach (var segment in segments)
         {
             TryDelete(segment.Path);
         }
-        progress?.Report(("已完成", total.Value, total, 0));
+        progress?.Report((candidate.Label, total, total, 0));
     }
 
-    private static async Task DownloadSegmentWithFailoverAsync(
+    private static async Task DownloadSegmentOnLockedRouteAsync(
         HttpClient http,
+        (string Label, string Url) candidate,
         Segment segment,
-        IReadOnlyList<(string Label, string Url)> candidates,
-        int initialCandidate,
         Action<long> updateProgress,
         CancellationToken cancellationToken)
     {
-        for (var attempt = 0; attempt < candidates.Count * 3; attempt++)
+        var lastError = "";
+        for (var attempt = 0; attempt < 6; attempt++)
         {
             cancellationToken.ThrowIfCancellationRequested();
             var offset = segment.Downloaded;
@@ -293,7 +288,6 @@ internal sealed class GitHubAcceleratedDownloader
                 return;
             }
 
-            var candidate = candidates[(initialCandidate + attempt) % candidates.Count];
             try
             {
                 using var request = new HttpRequestMessage(HttpMethod.Get, candidate.Url);
@@ -305,6 +299,11 @@ internal sealed class GitHubAcceleratedDownloader
                     HttpCompletionOption.ResponseHeadersRead,
                     cancellationToken);
                 response.EnsureSuccessStatusCode();
+                if (response.StatusCode != HttpStatusCode.PartialContent)
+                {
+                    throw new IOException("线路不支持稳定分片续传");
+                }
+
                 await using var source = await response.Content.ReadAsStreamAsync(cancellationToken);
                 await using var output = new FileStream(
                     segment.Path,
@@ -316,13 +315,16 @@ internal sealed class GitHubAcceleratedDownloader
                 var buffer = new byte[128 * 1024];
                 while (offset < segment.Expected)
                 {
+                    using var stallCancellation =
+                        CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                    stallCancellation.CancelAfter(TimeSpan.FromSeconds(20));
                     var wanted = (int)Math.Min(buffer.Length, segment.Expected - offset);
                     var read = await source.ReadAsync(
                         buffer.AsMemory(0, wanted),
-                        cancellationToken);
+                        stallCancellation.Token);
                     if (read == 0)
                     {
-                        break;
+                        throw new IOException("线路提前结束分片传输");
                     }
                     await output.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
                     offset += read;
@@ -330,159 +332,147 @@ internal sealed class GitHubAcceleratedDownloader
                     updateProgress(offset);
                 }
                 await output.FlushAsync(cancellationToken);
-                if (offset >= segment.Expected)
-                {
-                    return;
-                }
+                return;
             }
-            catch (OperationCanceledException)
+                    catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
                 throw;
             }
-            catch
+            catch (Exception ex)
             {
-                // Keep completed bytes in this segment and try the next route.
+                lastError = ex.Message;
+                await Task.Delay(
+                    TimeSpan.FromMilliseconds(500 * (attempt + 1)),
+                    cancellationToken);
             }
-            await Task.Delay(TimeSpan.FromMilliseconds(Math.Min(4000, 350 * (attempt + 1))), cancellationToken);
         }
 
-        throw new IOException($"分片 {segment.Index + 1} 无法完成，已保留断点");
+        throw new IOException(
+            $"分片 {segment.Index + 1} 在 {candidate.Label} 多次续传失败：{lastError}，断点已保留");
     }
 
-    private static async Task<long?> GetContentLengthAsync(
-        HttpClient http,
-        string url,
-        CancellationToken cancellationToken)
-    {
-        if (url.Contains("github.com", StringComparison.OrdinalIgnoreCase) &&
-            !Mirrors.Any(mirror => url.StartsWith(mirror, StringComparison.OrdinalIgnoreCase)))
-        {
-            return null;
-        }
-        using var request = new HttpRequestMessage(HttpMethod.Get, url);
-        request.Headers.Range = new RangeHeaderValue(0, 0);
-        try
-        {
-            using var response = await http.SendAsync(
-                request,
-                HttpCompletionOption.ResponseHeadersRead,
-                cancellationToken);
-            if (!response.IsSuccessStatusCode)
-            {
-                return null;
-            }
-            return response.StatusCode == HttpStatusCode.PartialContent
-                ? response.Content.Headers.ContentRange?.Length
-                : response.Content.Headers.ContentLength;
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch
-        {
-            return null;
-        }
-    }
-
-    private static async Task DownloadSingleAcrossSourcesAsync(
+    private static async Task DownloadSingleFromSourceAsync(
         HttpClient http,
         string destination,
-        IReadOnlyList<(string Label, string Url)> candidates,
+        (string Label, string Url) candidate,
         IProgress<(string Source, long Bytes, long? Total, double Speed)>? progress,
         CancellationToken cancellationToken)
     {
         var part = destination + ".part";
-        foreach (var (label, url) in candidates)
+        var existing = File.Exists(part) ? new FileInfo(part).Length : 0;
+        using var request = new HttpRequestMessage(HttpMethod.Get, candidate.Url);
+        if (existing > 0)
         {
-            try
+            request.Headers.Range = new RangeHeaderValue(existing, null);
+        }
+
+        using var response = await http.SendAsync(
+            request,
+            HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken);
+        response.EnsureSuccessStatusCode();
+        var append = existing > 0 &&
+                     response.StatusCode == HttpStatusCode.PartialContent;
+        if (existing > 0 && !append)
+        {
+            existing = 0;
+        }
+
+        var total = response.Content.Headers.ContentRange?.Length ??
+                    (response.Content.Headers.ContentLength is { } length
+                        ? existing + length
+                        : null);
+        await using var source = await response.Content.ReadAsStreamAsync(cancellationToken);
+        await using var output = new FileStream(
+            part,
+            append ? FileMode.Append : FileMode.Create,
+            FileAccess.Write,
+            FileShare.None,
+            128 * 1024,
+            FileOptions.Asynchronous | FileOptions.SequentialScan);
+        var buffer = new byte[128 * 1024];
+        var received = existing;
+        var speedWatch = Stopwatch.StartNew();
+        var speedBytes = 0L;
+        while (true)
+        {
+            var read = await source.ReadAsync(buffer, cancellationToken);
+            if (read == 0)
             {
-                var existing = File.Exists(part) ? new FileInfo(part).Length : 0;
-                using var request = new HttpRequestMessage(HttpMethod.Get, url);
-                if (existing > 0)
-                {
-                    request.Headers.Range = new RangeHeaderValue(existing, null);
-                }
-                using var response = await http.SendAsync(
-                    request,
-                    HttpCompletionOption.ResponseHeadersRead,
-                    cancellationToken);
-                response.EnsureSuccessStatusCode();
-                var append = existing > 0 &&
-                             response.StatusCode == HttpStatusCode.PartialContent;
-                if (existing > 0 && !append)
-                {
-                    existing = 0;
-                }
-                var total = response.Content.Headers.ContentRange?.Length ??
-                            (response.Content.Headers.ContentLength is { } length
-                                ? existing + length
-                                : null);
-                await using var source = await response.Content.ReadAsStreamAsync(cancellationToken);
-                await using var output = new FileStream(
-                    part,
-                    append ? FileMode.Append : FileMode.Create,
-                    FileAccess.Write,
-                    FileShare.None,
-                    128 * 1024,
-                    FileOptions.Asynchronous | FileOptions.SequentialScan);
-                var buffer = new byte[128 * 1024];
-                var received = existing;
-                var speedWatch = Stopwatch.StartNew();
-                var speedBytes = 0L;
-                while (true)
-                {
-                    var read = await source.ReadAsync(buffer, cancellationToken);
-                    if (read == 0)
-                    {
-                        break;
-                    }
-                    await output.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
-                    received += read;
-                    speedBytes += read;
-                    if (speedWatch.ElapsedMilliseconds >= 250)
-                    {
-                        progress?.Report((
-                            label,
-                            received,
-                            total,
-                            speedBytes / Math.Max(0.001, speedWatch.Elapsed.TotalSeconds)));
-                        speedBytes = 0;
-                        speedWatch.Restart();
-                    }
-                }
-                await output.FlushAsync(cancellationToken);
-                if (total is not null && new FileInfo(part).Length != total.Value)
-                {
-                    throw new IOException("下载不完整，保留断点并切换线路");
-                }
-                File.Move(part, destination, overwrite: true);
-                progress?.Report((label, received, total ?? received, 0));
-                return;
+                break;
             }
-            catch (OperationCanceledException)
+            await output.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
+            received += read;
+            speedBytes += read;
+            if (speedWatch.ElapsedMilliseconds >= 350)
             {
-                throw;
-            }
-            catch
-            {
-                // The .part file is intentionally retained for the next route.
+                progress?.Report((
+                    candidate.Label,
+                    received,
+                    total,
+                    speedBytes / Math.Max(0.001, speedWatch.Elapsed.TotalSeconds)));
+                speedBytes = 0;
+                speedWatch.Restart();
             }
         }
-        throw new IOException("GitHub 加速线路均下载失败");
+        await output.FlushAsync(cancellationToken);
+        if (total is not null && new FileInfo(part).Length != total.Value)
+        {
+            throw new IOException("下载不完整，断点已保留");
+        }
+        File.Move(part, destination, overwrite: true);
+        progress?.Report((candidate.Label, received, total ?? received, 0));
+    }
+
+    private static async Task<(bool SupportsRange, long? Total)> ProbeRangeAsync(
+        HttpClient http,
+        string url,
+        CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, url);
+        request.Headers.Range = new RangeHeaderValue(0, 0);
+        using var response = await http.SendAsync(
+            request,
+            HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken);
+        response.EnsureSuccessStatusCode();
+        if (response.StatusCode != HttpStatusCode.PartialContent)
+        {
+            return (false, response.Content.Headers.ContentLength);
+        }
+        return (true, response.Content.Headers.ContentRange?.Length);
     }
 
     private static List<(long Start, long End)> BuildRanges(long total, int count)
     {
-        var result = new List<(long Start, long End)>();
+        var ranges = new List<(long Start, long End)>();
         var size = total / count;
         for (var index = 0; index < count; index++)
         {
             var start = index * size;
             var end = index == count - 1 ? total - 1 : start + size - 1;
-            result.Add((start, end));
+            ranges.Add((start, end));
         }
-        return result;
+        return ranges;
+    }
+
+    private static long GetDownloadedBytes(string destination)
+    {
+        var total = 0L;
+        for (var index = 0; index < SegmentCount; index++)
+        {
+            var path = destination + $".segment{index}";
+            if (File.Exists(path))
+            {
+                total += new FileInfo(path).Length;
+            }
+        }
+        var part = destination + ".part";
+        if (File.Exists(part))
+        {
+            total += new FileInfo(part).Length;
+        }
+        return total;
     }
 
     private static HttpClient CreateClient()
@@ -490,7 +480,7 @@ internal sealed class GitHubAcceleratedDownloader
         var handler = new SocketsHttpHandler
         {
             AutomaticDecompression = DecompressionMethods.All,
-            ConnectTimeout = TimeSpan.FromSeconds(15),
+            ConnectTimeout = TimeSpan.FromSeconds(12),
             MaxConnectionsPerServer = 12,
             PooledConnectionLifetime = TimeSpan.FromMinutes(5)
         };
@@ -500,7 +490,7 @@ internal sealed class GitHubAcceleratedDownloader
         };
         http.DefaultRequestHeaders.UserAgent.ParseAdd(
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
-            "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 MajdataSync/1.8");
+            "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 MajdataSync/1.8.2");
         http.DefaultRequestHeaders.Accept.ParseAdd("application/octet-stream");
         return http;
     }
